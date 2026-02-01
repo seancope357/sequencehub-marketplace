@@ -4,7 +4,24 @@
 -- This migration adds RLS policies for all tables
 -- Compatible with Supabase's auth system
 
--- Enable RLS on all tables
+-- ============================================
+-- HELPER FUNCTION (MUST BE FIRST!)
+-- ============================================
+
+-- Function to get current user ID from JWT
+-- This MUST be created BEFORE any policies that reference it
+CREATE OR REPLACE FUNCTION current_user_id()
+RETURNS TEXT AS $$
+  SELECT COALESCE(
+    current_setting('request.jwt.claims', true)::json->>'sub',
+    ''
+  )::text;
+$$ LANGUAGE SQL STABLE;
+
+-- ============================================
+-- ENABLE RLS ON ALL TABLES
+-- ============================================
+
 ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Profile" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "UserRole" ENABLE ROW LEVEL SECURITY;
@@ -115,13 +132,14 @@ CREATE POLICY "Product versions follow product visibility"
     )
   );
 
--- Product files follow product visibility
+-- Product files follow product visibility (via ProductVersion)
 CREATE POLICY "Product files follow product visibility"
   ON "ProductFile" FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM "Product"
-      WHERE "Product".id = "ProductFile"."productId"
+      SELECT 1 FROM "ProductVersion"
+      JOIN "Product" ON "Product".id = "ProductVersion"."productId"
+      WHERE "ProductVersion".id = "ProductFile"."versionId"
       AND ("Product".status = 'PUBLISHED' OR "Product"."creatorId" = current_user_id())
     )
   );
@@ -133,16 +151,16 @@ CREATE POLICY "Product files follow product visibility"
 -- Users can read their own entitlements
 CREATE POLICY "Users can read own entitlements"
   ON "Entitlement" FOR SELECT
-  USING ("buyerId" = current_user_id());
+  USING ("userId" = current_user_id());
 
 -- ============================================
 -- ORDER POLICIES
 -- ============================================
 
--- Buyers can read their own orders
-CREATE POLICY "Buyers can read own orders"
+-- Users can read their own orders
+CREATE POLICY "Users can read own orders"
   ON "Order" FOR SELECT
-  USING ("buyerId" = current_user_id());
+  USING ("userId" = current_user_id());
 
 -- Creators can read orders for their products
 CREATE POLICY "Creators can read orders for their products"
@@ -157,25 +175,12 @@ CREATE POLICY "Creators can read orders for their products"
   );
 
 -- ============================================
--- HELPER FUNCTION
--- ============================================
-
--- Function to get current user ID from JWT
-CREATE OR REPLACE FUNCTION current_user_id()
-RETURNS TEXT AS $$
-  SELECT COALESCE(
-    current_setting('request.jwt.claims', true)::json->>'sub',
-    ''
-  )::text;
-$$ LANGUAGE SQL STABLE;
-
--- ============================================
 -- STORAGE BUCKETS
 -- ============================================
 
 -- Create storage buckets
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES 
+VALUES
   (
     'product-files',
     'product-files',
@@ -210,7 +215,7 @@ CREATE POLICY "Entitled users can download product files"
     bucket_id = 'product-files'
     AND EXISTS (
       SELECT 1 FROM "Entitlement"
-      WHERE "Entitlement"."buyerId" = current_user_id()
+      WHERE "Entitlement"."userId" = current_user_id()
       AND "Entitlement"."isActive" = true
     )
   );

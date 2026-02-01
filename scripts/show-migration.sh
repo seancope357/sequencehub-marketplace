@@ -1,0 +1,21 @@
+#!/bin/bash
+
+echo "═══════════════════════════════════════════════════════════"
+echo "  SUPABASE RLS & STORAGE MIGRATION"
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+echo "📋 Instructions:"
+echo "  1. Go to: https://fhrregyvsmwpfkpnkocy.supabase.co"
+echo "  2. Click 'SQL Editor' in left sidebar"
+echo "  3. Click 'New Query'"
+echo "  4. Copy the SQL below (starting from '--')"
+echo "  5. Paste into SQL Editor"
+echo "  6. Click 'Run' (or press ⌘ + Enter)"
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo ""
+cat supabase/migrations/003_rls_and_storage.sql
+echo ""
+echo "═══════════════════════════════════════════════════════════"
+echo "✅ Migration SQL displayed above"
+echo "═══════════════════════════════════════════════════════════"
