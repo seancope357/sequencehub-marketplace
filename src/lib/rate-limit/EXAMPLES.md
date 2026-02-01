@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 ```typescript
 // /src/app/api/user/profile/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function PATCH(request: NextRequest) {
@@ -105,7 +105,8 @@ export const POST = withRateLimit(
 ```typescript
 // /src/app/api/admin/users/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isAdmin } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth-utils';
+import { getCurrentUser } from '@/lib/auth';;
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
 ```typescript
 // /src/app/api/products/[id]/like/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { applyRateLimit } from '@/lib/rate-limit';
 
 export async function POST(
@@ -178,7 +179,7 @@ export async function POST(
 ```typescript
 // /src/app/api/search/advanced/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { applyRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
@@ -255,7 +256,7 @@ export async function POST(request: NextRequest) {
 ```typescript
 // /src/app/api/export/data/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { applyRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
@@ -299,7 +300,7 @@ export async function POST(request: NextRequest) {
 ```typescript
 // /src/app/api/batch/process/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { applyRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
@@ -490,7 +491,8 @@ rateLimiter.onViolation(async (violation) => {
 ```typescript
 // /src/app/api/admin/rate-limits/stats/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isAdmin } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth-utils';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -541,7 +543,8 @@ export async function GET(request: NextRequest) {
 ```typescript
 // /src/app/api/admin/rate-limits/reset/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isAdmin } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth-utils';
+import { getCurrentUser } from '@/lib/auth';;
 import { rateLimiter, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {

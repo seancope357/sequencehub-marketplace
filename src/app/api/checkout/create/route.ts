@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import Stripe from 'stripe';

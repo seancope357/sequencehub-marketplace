@@ -4,7 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isCreatorOrAdmin } from '@/lib/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
 import { getAccountStatus } from '@/lib/stripe-connect';
 

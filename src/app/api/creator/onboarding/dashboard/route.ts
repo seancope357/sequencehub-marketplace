@@ -4,7 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, isCreatorOrAdmin, createAuditLog } from '@/lib/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
+import { getCurrentUser, createAuditLog } from '@/lib/auth';;
 import { db } from '@/lib/db';
 import { createExpressDashboardLink } from '@/lib/stripe-connect';
 

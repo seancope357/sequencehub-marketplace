@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, createAuditLog } from '@/lib/auth';
+import { createSession, createAuditLog } from '@/lib/auth';;
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
