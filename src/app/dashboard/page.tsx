@@ -15,22 +15,25 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
     totalSales: 0,
     totalRevenue: 0,
     totalDownloads: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   useEffect(() => {
+    // Don't redirect while auth is still loading
+    if (authLoading) return;
+
     if (!isAuthenticated) {
       window.location.href = '/auth/login';
       return;
     }
     loadStats();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, authLoading]);
 
   const loadStats = async () => {
     try {
@@ -42,7 +45,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
-      setIsLoading(false);
+      setIsLoadingStats(false);
     }
   };
 
@@ -53,7 +56,8 @@ export default function Dashboard() {
     }).format(amount);
   };
 
-  if (isLoading) {
+  // Show loading while auth or stats are loading
+  if (authLoading || isLoadingStats) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">Loading...</div>
