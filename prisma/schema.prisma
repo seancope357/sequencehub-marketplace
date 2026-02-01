@@ -1,0 +1,526 @@
+// SequenceHUB.com - Database Schema
+// Marketplace for xLights sequences with comprehensive security and versioning support
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MANAGEMENT & AUTHENTICATION
+// ============================================
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  name              String?
+  emailVerified     Boolean  @default(false)
+  avatar            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  profile           Profile?
+  roles             UserRole[]
+  creatorAccount    CreatorAccount?
+  products          Product[]
+  orders            Order[]
+  entitlements      Entitlement[]
+  auditLogs         AuditLog[]
+  downloadTokens    DownloadToken[]
+}
+
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  displayName     String
+  bio             String?
+  website         String?
+  socialTwitter  String?
+  socialYouTube   String?
+  socialInstagram String?
+  location        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum Role {
+  ADMIN
+  CREATOR
+  BUYER
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  role      Role
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+}
+
+// ============================================
+// CREATOR & STRIPE CONNECT
+// ============================================
+
+enum OnboardingStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  SUSPENDED
+}
+
+model CreatorAccount {
+  id                  String           @id @default(cuid())
+  userId              String           @unique
+  stripeAccountId     String?          @unique
+  stripeAccountStatus String?          // Stripe Connect account status
+  onboardingStatus    OnboardingStatus  @default(PENDING)
+  platformFeePercent  Float            @default(10.0) // 10% platform fee
+  totalRevenue        Float            @default(0)
+  totalSales          Int              @default(0)
+  payoutSchedule      String           @default("manual") // manual, daily, weekly, monthly
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stripeAccountId])
+}
+
+// ============================================
+// PRODUCTS & VERSIONING
+// ============================================
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  SUSPENDED
+}
+
+enum FileType {
+  SOURCE      // XSQ/XML project files
+  RENDERED    // FSEQ playback files
+  ASSET       // Images, audio, other assets
+  PREVIEW     // Video, GIF previews
+}
+
+enum ProductCategory {
+  CHRISTMAS
+  HALLOWEEN
+  PIXEL_TREE
+  MELODY
+  MATRIX
+  ARCH
+  PROP
+  FACEBOOK
+  OTHER
+}
+
+enum LicenseType {
+  PERSONAL
+  COMMERCIAL
+}
+
+model Product {
+  id               String         @id @default(cuid())
+  slug             String         @unique
+  creatorId        String
+  title            String
+  description      String         // Markdown
+  category         ProductCategory
+  status           ProductStatus  @default(DRAFT)
+  licenseType      LicenseType    @default(PERSONAL)
+  seatCount        Int?           // For commercial licenses
+  
+  // xLights-specific metadata
+  xLightsVersionMin String?
+  xLightsVersionMax String?
+  targetUse        String?        // "Christmas", "Halloween", "Pixel tree", etc.
+  expectedProps    String?        // Freeform notes about expected props/models
+  includesFSEQ     Boolean        @default(false)
+  includesSource   Boolean        @default(false)
+  
+  // SEO
+  metaTitle        String?
+  metaDescription  String?
+  metaKeywords     String?
+  
+  // Stats
+  viewCount        Int            @default(0)
+  saleCount        Int            @default(0)
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  creator          User           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  versions         ProductVersion[]
+  media            ProductMedia[]
+  tags             ProductTag[]
+  prices           Price[]
+  orderItems       OrderItem[]
+
+  @@index([creatorId])
+  @@index([slug])
+  @@index([status])
+  @@index([category])
+}
+
+model ProductVersion {
+  id              String   @id @default(cuid())
+  productId       String
+  versionNumber   Int
+  versionName     String   // e.g., "1.0.0", "v1", "2024 Edition"
+  changelog       String?  // Markdown
+  isLatest        Boolean  @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  files           ProductFile[]
+
+  @@unique([productId, versionNumber])
+  @@index([productId])
+  @@index([isLatest])
+}
+
+model ProductFile {
+  id              String   @id @default(cuid())
+  versionId       String
+  fileName        String
+  originalName    String
+  fileType        FileType
+  fileSize        Int      // in bytes
+  fileHash        String   // SHA256
+  storageKey      String   // Path in storage
+  mimeType        String?
+  
+  // File metadata (extracted during analysis)
+  metadata        String?  // JSON string with file-specific metadata
+  
+  // xLights-specific metadata (if applicable)
+  sequenceLength  Float?   // in seconds
+  fps             Int?
+  channelCount    Int?
+  
+  createdAt       DateTime @default(now())
+
+  // Relations
+  version         ProductVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([fileHash])
+}
+
+model ProductMedia {
+  id              String   @id @default(cuid())
+  productId       String
+  mediaType       String   // 'cover', 'gallery', 'preview'
+  fileName        String
+  originalName    String
+  fileSize        Int
+  fileHash        String
+  storageKey      String
+  mimeType        String?
+  width           Int?
+  height          Int?
+  altText         String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  // Relations
+  product         Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  // Relations
+  products  ProductTag[]
+}
+
+model ProductTag {
+  id        String   @id @default(cuid())
+  productId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  // Relations
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, tagId])
+  @@index([productId])
+  @@index([tagId])
+}
+
+// ============================================
+// PRICING & PAYMENTS
+// ============================================
+
+model Price {
+  id              String   @id @default(cuid())
+  productId       String
+  amount          Float    // in USD
+  currency        String   @default("USD")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+enum CheckoutStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+model CheckoutSession {
+  id              String          @id @default(cuid())
+  sessionId       String          @unique // Stripe checkout session ID
+  userId          String?
+  productId       String
+  priceId         String
+  amount          Float
+  currency        String
+  status          CheckoutStatus  @default(PENDING)
+  successUrl      String?
+  cancelUrl       String?
+  metadata        String?         // JSON string for additional metadata
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+}
+
+// ============================================
+// ORDERS & ENTITLEMENTS
+// ============================================
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  userId          String
+  totalAmount     Float
+  currency        String      @default("USD")
+  status          OrderStatus @default(PENDING)
+  paymentIntentId String?     @unique // Stripe payment intent ID
+  
+  // Refund tracking
+  refundedAmount  Float       @default(0)
+  refundedAt      DateTime?
+  
+  // UTM tracking for analytics
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  entitlements    Entitlement[]
+  auditLogs       AuditLog[]
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([paymentIntentId])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  productId       String
+  versionId       String?
+  priceId         String
+  priceAtPurchase Float
+  currency        String
+  createdAt       DateTime @default(now())
+
+  // Relations
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Entitlement {
+  id              String   @id @default(cuid())
+  userId          String
+  orderId         String
+  productId       String
+  versionId       String
+  licenseType     LicenseType
+  isActive        Boolean  @default(true)
+  expiresAt       DateTime?
+  lastDownloadAt  DateTime?
+  downloadCount   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, versionId])
+  @@index([userId])
+  @@index([orderId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+// ============================================
+// DOWNLOADS & ACCESS CONTROL
+// ============================================
+
+model DownloadToken {
+  id              String   @id @default(cuid())
+  userId          String
+  entitlementId   String
+  fileId          String?
+  token           String   @unique // Single-use token
+  expiresAt       DateTime
+  usedAt          DateTime?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([entitlementId])
+  @@index([expiresAt])
+}
+
+model AccessLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  entitlementId   String?
+  fileId          String?
+  token           String?
+  action          String   // 'download_attempt', 'download_success', 'download_denied', 'token_used'
+  ipAddress       String?
+  userAgent       String?
+  success         Boolean
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([entitlementId])
+  @@index([ipAddress])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============================================
+// AUDIT LOGS & SECURITY
+// ============================================
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_DELETED
+  PRODUCT_PUBLISHED
+  PRODUCT_UNPUBLISHED
+  PRODUCT_ARCHIVED
+  FILE_UPLOADED
+  FILE_DELETED
+  ORDER_CREATED
+  ORDER_UPDATED
+  ORDER_REFUNDED
+  ENTITLEMENT_GRANTED
+  ENTITLEMENT_REVOKED
+  STRIPE_WEBHOOK_RECEIVED
+  STRIPE_WEBHOOK_PROCESSED
+  STRIPE_WEBHOOK_FAILED
+  STRIPE_ONBOARDING_STARTED
+  STRIPE_ACCOUNT_UPDATED
+  STRIPE_CAPABILITY_UPDATED
+  STRIPE_DASHBOARD_ACCESSED
+  CHECKOUT_SESSION_CREATED
+  PAYMENT_RECEIVED
+  REFUND_INITIATED
+  PAYOUT_CREATED
+  ADMIN_ACTION
+  RATE_LIMIT_EXCEEDED
+  SECURITY_ALERT
+  DOWNLOAD_TOKEN_CREATED
+  DOWNLOAD_ACCESS_DENIED
+}
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  userId          String?
+  orderId         String?
+  action          AuditAction
+  entityType      String?     // 'user', 'product', 'order', etc.
+  entityId        String?
+  changes         String?     // JSON string of changes made
+  metadata        String?     // JSON string for additional context
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime    @default(now())
+
+  // Relations
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order           Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

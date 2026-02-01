@@ -1,0 +1,241 @@
+/**
+ * Stripe Connect Utilities
+ * Handles all Stripe Connect Express account operations for creator onboarding
+ */
+
+import Stripe from 'stripe';
+import { db } from '@/lib/db';
+import { OnboardingStatus } from '@prisma/client';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2024-12-18.acacia',
+});
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+/**
+ * Create a Stripe Connect Express account for a creator
+ */
+export async function createConnectedAccount(userId: string, email: string): Promise<Stripe.Account> {
+  try {
+    // Create Express account
+    const account = await stripe.accounts.create({
+      type: 'express',
+      country: 'US',
+      email: email,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      business_type: 'individual',
+      metadata: {
+        userId: userId,
+        platform: 'sequencehub',
+      },
+    });
+
+    return account;
+  } catch (error) {
+    console.error('Error creating Stripe Connect account:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate an account onboarding link for a creator
+ */
+export async function createAccountOnboardingLink(stripeAccountId: string): Promise<string> {
+  try {
+    const accountLink = await stripe.accountLinks.create({
+      account: stripeAccountId,
+      refresh_url: `${BASE_URL}/dashboard/creator/onboarding?refresh=true`,
+      return_url: `${BASE_URL}/dashboard/creator/onboarding?success=true`,
+      type: 'account_onboarding',
+    });
+
+    return accountLink.url;
+  } catch (error) {
+    console.error('Error creating account link:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate a login link to the Stripe Express Dashboard
+ */
+export async function createExpressDashboardLink(stripeAccountId: string): Promise<string> {
+  try {
+    const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
+    return loginLink.url;
+  } catch (error) {
+    console.error('Error creating dashboard link:', error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieve Stripe account details and check onboarding status
+ */
+export async function getAccountStatus(stripeAccountId: string): Promise<{
+  account: Stripe.Account;
+  isComplete: boolean;
+  chargesEnabled: boolean;
+  detailsSubmitted: boolean;
+  capabilitiesActive: boolean;
+}> {
+  try {
+    const account = await stripe.accounts.retrieve(stripeAccountId);
+
+    const isComplete = Boolean(
+      account.details_submitted &&
+      account.charges_enabled &&
+      account.payouts_enabled
+    );
+
+    const capabilitiesActive = Boolean(
+      account.capabilities?.card_payments === 'active' &&
+      account.capabilities?.transfers === 'active'
+    );
+
+    return {
+      account,
+      isComplete,
+      chargesEnabled: account.charges_enabled || false,
+      detailsSubmitted: account.details_submitted || false,
+      capabilitiesActive,
+    };
+  } catch (error) {
+    console.error('Error retrieving account status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update creator account in database based on Stripe account status
+ */
+export async function updateCreatorAccountStatus(
+  stripeAccountId: string,
+  account: Stripe.Account
+): Promise<void> {
+  try {
+    const isComplete = Boolean(
+      account.details_submitted &&
+      account.charges_enabled &&
+      account.payouts_enabled
+    );
+
+    const onboardingStatus: OnboardingStatus = isComplete
+      ? 'COMPLETED'
+      : account.details_submitted
+      ? 'IN_PROGRESS'
+      : 'PENDING';
+
+    await db.creatorAccount.update({
+      where: { stripeAccountId },
+      data: {
+        stripeAccountStatus: account.charges_enabled ? 'active' : 'pending',
+        onboardingStatus,
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error('Error updating creator account status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Initialize creator account with Stripe Connect
+ * Creates both the Stripe account and the database record
+ */
+export async function initializeCreatorAccount(
+  userId: string,
+  email: string
+): Promise<{
+  stripeAccountId: string;
+  onboardingUrl: string;
+}> {
+  try {
+    // Check if creator account already exists
+    const existingAccount = await db.creatorAccount.findUnique({
+      where: { userId },
+    });
+
+    let stripeAccountId: string;
+
+    if (existingAccount?.stripeAccountId) {
+      // Account already exists, just generate new onboarding link
+      stripeAccountId = existingAccount.stripeAccountId;
+    } else {
+      // Create new Stripe account
+      const account = await createConnectedAccount(userId, email);
+      stripeAccountId = account.id;
+
+      // Create or update database record
+      if (existingAccount) {
+        await db.creatorAccount.update({
+          where: { userId },
+          data: {
+            stripeAccountId,
+            stripeAccountStatus: 'pending',
+            onboardingStatus: 'IN_PROGRESS',
+          },
+        });
+      } else {
+        await db.creatorAccount.create({
+          data: {
+            userId,
+            stripeAccountId,
+            stripeAccountStatus: 'pending',
+            onboardingStatus: 'IN_PROGRESS',
+            platformFeePercent: 10.0, // Default 10% platform fee
+            payoutSchedule: 'manual',
+          },
+        });
+      }
+    }
+
+    // Generate onboarding link
+    const onboardingUrl = await createAccountOnboardingLink(stripeAccountId);
+
+    return {
+      stripeAccountId,
+      onboardingUrl,
+    };
+  } catch (error) {
+    console.error('Error initializing creator account:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if a creator account is fully onboarded and ready to receive payments
+ */
+export async function isAccountReadyForPayments(stripeAccountId: string): Promise<boolean> {
+  try {
+    const { isComplete, chargesEnabled } = await getAccountStatus(stripeAccountId);
+    return isComplete && chargesEnabled;
+  } catch (error) {
+    console.error('Error checking payment readiness:', error);
+    return false;
+  }
+}
+
+/**
+ * Handle account deauthorization (when creator disconnects)
+ */
+export async function handleAccountDeauthorization(stripeAccountId: string): Promise<void> {
+  try {
+    await db.creatorAccount.update({
+      where: { stripeAccountId },
+      data: {
+        stripeAccountStatus: 'deauthorized',
+        onboardingStatus: 'SUSPENDED',
+        updatedAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error('Error handling account deauthorization:', error);
+    throw error;
+  }
+}
