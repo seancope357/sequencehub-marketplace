@@ -7,11 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/lib/store/auth-store';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { refreshUser } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +34,9 @@ export default function LoginPage() {
       if (response.ok) {
         const data = await response.json();
         toast.success(`Welcome back, ${data.user.name || data.user.email}!`);
+
+        // Refresh auth store before redirecting
+        await refreshUser();
         window.location.href = '/dashboard';
       } else {
         const error = await response.json();
