@@ -133,19 +133,6 @@ export default function LoginPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Demo Credentials */}
-        <Card className="mt-4 bg-muted/50">
-          <CardContent className="p-4">
-            <p className="text-sm font-medium mb-2">Demo Account (Admin):</p>
-            <p className="text-xs text-muted-foreground">
-              Email: admin@sequencehub.com
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Password: admin123
-            </p>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
