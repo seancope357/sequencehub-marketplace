@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { headers } from 'next/headers';
 import { db } from '@/lib/db';
 import { createAuditLog } from '@/lib/auth';;
+import { sendPurchaseConfirmation, sendSaleNotification } from '@/lib/email/send';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-12-18.acacia',
@@ -136,6 +137,13 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
         where: { isLatest: true },
         take: 1,
       },
+      creator: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
     },
   });
 
@@ -223,6 +231,58 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
   });
 
   console.log('Checkout session processed successfully:', orderNumber);
+
+  // Fetch buyer information for email
+  const buyer = await db.user.findUnique({
+    where: { id: userId },
+    select: {
+      email: true,
+      name: true,
+    },
+  });
+
+  if (buyer) {
+    // Send purchase confirmation to buyer (fire and forget)
+    sendPurchaseConfirmation({
+      recipientEmail: buyer.email,
+      recipientName: buyer.name || undefined,
+      orderNumber,
+      productName: product.title,
+      productSlug: product.slug,
+      creatorName: product.creator.name || 'the creator',
+      totalAmount: checkoutSession.amount,
+      currency: checkoutSession.currency,
+      purchaseDate: new Date(),
+      libraryUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/library`,
+      licenseType: product.licenseType,
+      downloadUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/library`,
+    }).catch((error) => {
+      console.error('Failed to send purchase confirmation email:', error);
+    });
+
+    // Calculate platform fee and net earnings for creator email
+    const platformFeePercent = 10; // Default platform fee
+    const platformFeeAmount = (checkoutSession.amount * platformFeePercent) / 100;
+    const netEarnings = checkoutSession.amount - platformFeeAmount;
+
+    // Send sale notification to creator (fire and forget)
+    sendSaleNotification({
+      recipientEmail: product.creator.email,
+      recipientName: product.creator.name || undefined,
+      orderNumber,
+      productName: product.title,
+      productSlug: product.slug,
+      buyerName: buyer.name || undefined,
+      saleAmount: checkoutSession.amount,
+      platformFeeAmount,
+      netEarnings,
+      currency: checkoutSession.currency,
+      saleDate: new Date(),
+      dashboardUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard`,
+    }).catch((error) => {
+      console.error('Failed to send sale notification email:', error);
+    });
+  }
 }
 
 async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {

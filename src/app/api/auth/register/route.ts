@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registerUser, createAuditLog } from '@/lib/auth';;
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
+import { sendWelcomeEmail } from '@/lib/email/send';
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting: 5 attempts per hour per IP
@@ -62,6 +63,17 @@ export async function POST(request: NextRequest) {
       entityId: user.id,
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
       userAgent: request.headers.get('user-agent') || undefined,
+    });
+
+    // Send welcome email (fire and forget - don't block response)
+    sendWelcomeEmail({
+      recipientEmail: user.email,
+      userName: user.name || 'there',
+      dashboardUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/dashboard`,
+      registrationDate: new Date(),
+    }).catch((error) => {
+      console.error('Failed to send welcome email:', error);
+      // Don't fail registration if email fails
     });
 
     return NextResponse.json(

@@ -40,6 +40,10 @@ interface UploadedFile {
   fileName: string;
   fileSize: number;
   fileType: 'SOURCE' | 'RENDERED' | 'ASSET' | 'PREVIEW';
+  uploadProgress?: number;
+  uploadedFileId?: string;
+  storageKey?: string;
+  uploadError?: string;
 }
 
 const CATEGORIES = [
@@ -156,6 +160,85 @@ export default function NewProductPage() {
     setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
+  const uploadFileToStorage = async (uploadedFile: UploadedFile): Promise<void> => {
+    const formData = new FormData();
+    formData.append('file', uploadedFile.file);
+    formData.append('fileType', uploadedFile.fileType);
+
+    try {
+      const response = await fetch('/api/upload/simple', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+
+      const data = await response.json();
+
+      // Update the file in state with upload results
+      setUploadedFiles((prev) =>
+        prev.map((f) =>
+          f.id === uploadedFile.id
+            ? {
+                ...f,
+                uploadedFileId: data.fileId,
+                storageKey: data.storageKey,
+                uploadProgress: 100,
+                uploadError: undefined,
+              }
+            : f
+        )
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+
+      // Update file with error
+      setUploadedFiles((prev) =>
+        prev.map((f) =>
+          f.id === uploadedFile.id
+            ? { ...f, uploadError: errorMessage, uploadProgress: 0 }
+            : f
+        )
+      );
+
+      throw error;
+    }
+  };
+
+  const uploadAllFiles = async (): Promise<boolean> => {
+    if (uploadedFiles.length === 0) return true;
+
+    const filesToUpload = uploadedFiles.filter((f) => !f.uploadedFileId);
+    if (filesToUpload.length === 0) return true;
+
+    let uploadsFailed = false;
+
+    // Upload files sequentially with progress tracking
+    for (let i = 0; i < filesToUpload.length; i++) {
+      const file = filesToUpload[i];
+
+      try {
+        // Set progress to show upload starting
+        setUploadedFiles((prev) =>
+          prev.map((f) => (f.id === file.id ? { ...f, uploadProgress: 1 } : f))
+        );
+
+        await uploadFileToStorage(file);
+
+        toast.success(`Uploaded ${file.fileName}`);
+      } catch (error) {
+        uploadsFailed = true;
+        toast.error(`Failed to upload ${file.fileName}`);
+        console.error(`Upload error for ${file.fileName}:`, error);
+      }
+    }
+
+    return !uploadsFailed;
+  };
+
   const handleSave = async (publish: boolean = false) => {
     // Check Stripe account first
     if (!stripeStatus?.canReceivePayments) {
@@ -192,6 +275,18 @@ export default function NewProductPage() {
       setIsSaving(true);
       setIsPublishing(publish);
 
+      // Step 1: Upload all files to storage first
+      if (uploadedFiles.length > 0) {
+        toast.info(`Uploading ${uploadedFiles.length} file(s)...`);
+        const uploadSuccess = await uploadAllFiles();
+
+        if (!uploadSuccess) {
+          toast.error('Some files failed to upload. Please try again.');
+          return;
+        }
+      }
+
+      // Step 2: Create product with uploaded file IDs
       const response = await fetch('/api/dashboard/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,9 +305,11 @@ export default function NewProductPage() {
           seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
           status: publish ? 'PUBLISHED' : 'DRAFT',
           files: uploadedFiles.map((f) => ({
+            fileId: f.uploadedFileId,
             fileName: f.fileName,
             fileType: f.fileType,
             fileSize: f.fileSize,
+            storageKey: f.storageKey,
           })),
         }),
       });
@@ -598,11 +695,29 @@ export default function NewProductPage() {
                                 className="flex items-center justify-between p-3 border rounded"
                               >
                                 <div className="flex items-center gap-3 flex-1">
-                                  <Package className="h-5 w-5 text-muted-foreground" />
+                                  {file.uploadProgress !== undefined && file.uploadProgress > 0 ? (
+                                    file.uploadProgress === 100 ? (
+                                      <Check className="h-5 w-5 text-green-600" />
+                                    ) : (
+                                      <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    )
+                                  ) : file.uploadError ? (
+                                    <X className="h-5 w-5 text-destructive" />
+                                  ) : (
+                                    <Package className="h-5 w-5 text-muted-foreground" />
+                                  )}
                                   <div className="flex-1">
                                     <div className="font-medium">{file.fileName}</div>
                                     <div className="text-sm text-muted-foreground">
-                                      {formatFileSize(file.fileSize)}
+                                      {file.uploadError ? (
+                                        <span className="text-destructive">{file.uploadError}</span>
+                                      ) : file.uploadProgress === 100 ? (
+                                        <span className="text-green-600">✓ Uploaded successfully</span>
+                                      ) : file.uploadProgress !== undefined && file.uploadProgress > 0 ? (
+                                        <span>Uploading...</span>
+                                      ) : (
+                                        formatFileSize(file.fileSize)
+                                      )}
                                     </div>
                                   </div>
                                   <Badge variant="outline" className="text-xs">
@@ -613,6 +728,7 @@ export default function NewProductPage() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => removeFile(file.id)}
+                                  disabled={file.uploadProgress !== undefined && file.uploadProgress > 0 && file.uploadProgress < 100}
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
