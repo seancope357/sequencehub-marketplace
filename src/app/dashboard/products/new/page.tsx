@@ -12,6 +12,7 @@ import {
   DollarSign,
   Check,
   AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 
@@ -52,11 +54,27 @@ const CATEGORIES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
+interface StripeOnboardingStatus {
+  hasAccount: boolean;
+  stripeAccountId?: string;
+  onboardingStatus: string;
+  isComplete: boolean;
+  chargesEnabled: boolean;
+  detailsSubmitted: boolean;
+  capabilitiesActive: boolean;
+  needsOnboarding: boolean;
+  canReceivePayments: boolean;
+}
+
 export default function NewProductPage() {
   const { user, isAuthenticated } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // Stripe Connect status
+  const [stripeStatus, setStripeStatus] = useState<StripeOnboardingStatus | null>(null);
+  const [stripeLoading, setStripeLoading] = useState(true);
 
   // Basic Info
   const [title, setTitle] = useState('');
@@ -89,7 +107,26 @@ export default function NewProductPage() {
       window.location.href = '/auth/login';
       return;
     }
+    checkStripeStatus();
   }, [isAuthenticated]);
+
+  const checkStripeStatus = async () => {
+    try {
+      setStripeLoading(true);
+      const response = await fetch('/api/creator/onboarding/status');
+      if (response.ok) {
+        const data = await response.json();
+        setStripeStatus(data);
+      } else {
+        console.error('Failed to check Stripe status');
+      }
+    } catch (error) {
+      console.error('Error checking Stripe status:', error);
+    } finally {
+      setStripeLoading(false);
+      setIsLoading(false);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -120,6 +157,12 @@ export default function NewProductPage() {
   };
 
   const handleSave = async (publish: boolean = false) => {
+    // Check Stripe account first
+    if (!stripeStatus?.canReceivePayments) {
+      toast.error('Please connect your Stripe account before creating products');
+      return;
+    }
+
     if (!title.trim()) {
       toast.error('Title is required');
       return;
@@ -260,6 +303,39 @@ export default function NewProductPage() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-5xl mx-auto">
+          {/* Stripe Account Requirement Banner */}
+          {!stripeLoading && stripeStatus && !stripeStatus.canReceivePayments && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-5 w-5" />
+              <AlertTitle className="text-lg font-semibold">Stripe Account Required</AlertTitle>
+              <AlertDescription className="mt-2">
+                <p className="mb-3">
+                  You need to connect your Stripe account before you can sell products on SequenceHUB.
+                  This is required to receive payments from buyers.
+                </p>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-white hover:bg-gray-50"
+                    onClick={() => window.location.href = '/dashboard/creator/onboarding'}
+                  >
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Set Up Stripe Account
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-white hover:bg-white/10"
+                    onClick={checkStripeStatus}
+                  >
+                    Refresh Status
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {showPreview ? (
             /* Preview Mode */
             <Card>
@@ -360,14 +436,14 @@ export default function NewProductPage() {
                     <Button
                       variant="outline"
                       onClick={() => handleSave(false)}
-                      disabled={isSaving}
+                      disabled={isSaving || !stripeStatus?.canReceivePayments}
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {isSaving ? 'Saving...' : 'Save Draft'}
                     </Button>
                     <Button
                       onClick={() => handleSave(true)}
-                      disabled={isSaving}
+                      disabled={isSaving || !stripeStatus?.canReceivePayments}
                     >
                       <Package className="h-4 w-4 mr-2" />
                       {isPublishing ? 'Publishing...' : 'Publish'}
@@ -825,6 +901,27 @@ export default function NewProductPage() {
 
                       {/* Validation */}
                       <div className="space-y-2">
+                        {!stripeStatus?.canReceivePayments && (
+                          <div className="flex items-start gap-2 text-red-600 bg-red-50 p-3 rounded border border-red-200">
+                            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                            <div>
+                              <p className="font-semibold">Stripe Account Required</p>
+                              <p className="text-sm">
+                                You must connect your Stripe account before you can publish products.
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                                onClick={() => window.location.href = '/dashboard/creator/onboarding'}
+                              >
+                                <CreditCard className="h-4 w-4 mr-2" />
+                                Set Up Stripe Now
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
                         {(!title.trim() || !description.trim() || !category || price === '') && (
                           <div className="flex items-start gap-2 text-yellow-600 bg-yellow-50 p-3 rounded">
                             <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -850,14 +947,15 @@ export default function NewProductPage() {
                         )}
 
                         {title.trim() && description.trim() && category && price !== '' &&
-                          (includesFSEQ || includesSource || uploadedFiles.length > 0) && (
+                          (includesFSEQ || includesSource || uploadedFiles.length > 0) &&
+                          stripeStatus?.canReceivePayments && (
                             <div className="flex items-start gap-2 text-green-600 bg-green-50 p-3 rounded">
                               <Check className="h-5 w-5 flex-shrink-0" />
                               <div>
                                 <p className="font-semibold">Ready to Publish!</p>
                                 <p className="text-sm">
-                                  Your product has all required information. You can save as
-                                  draft or publish now.
+                                  Your product has all required information and your Stripe account is connected.
+                                  You can save as draft or publish now.
                                 </p>
                               </div>
                             </div>
