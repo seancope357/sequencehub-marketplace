@@ -15,12 +15,25 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
 /**
  * Create a Stripe Connect Express account for a creator
+ * Uses Stripe Connect V2 API with controller pattern
  */
 export async function createConnectedAccount(userId: string, email: string): Promise<Stripe.Account> {
   try {
-    // Create Express account
+    // Create Express account using V2 API format
+    // NOTE: Do NOT use top-level 'type' parameter - use controller.stripe_dashboard.type instead
     const account = await stripe.accounts.create({
-      type: 'express',
+      controller: {
+        stripe_dashboard: {
+          type: 'express', // Express dashboard type
+        },
+        fees: {
+          payer: 'application', // Platform pays Stripe fees
+        },
+        losses: {
+          payments: 'application', // Platform liable for payment disputes
+        },
+        requirement_collection: 'application', // Platform collects onboarding requirements
+      },
       country: 'US',
       email: email,
       capabilities: {
@@ -31,6 +44,7 @@ export async function createConnectedAccount(userId: string, email: string): Pro
       metadata: {
         userId: userId,
         platform: 'sequencehub',
+        createdWith: 'stripe-connect-v2',
       },
     });
 

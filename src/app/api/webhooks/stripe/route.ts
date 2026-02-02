@@ -35,6 +35,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // V2 API: Handle thin events by fetching full event data
+    // Thin events only contain minimal data - we need to fetch the complete event
+    if (event.data && 'object' in event.data && event.data.object === 'event') {
+      console.log('[Webhook] Detected thin event, fetching full event data...');
+      try {
+        event = await stripe.events.retrieve(event.id);
+        console.log('[Webhook] Successfully fetched full event data');
+      } catch (error) {
+        console.error('[Webhook] Failed to fetch full event data:', error);
+        // Continue with thin event if fetch fails (graceful degradation)
+      }
+    }
+
     // Log webhook received
     await createAuditLog({
       action: 'STRIPE_WEBHOOK_RECEIVED',
@@ -44,6 +57,7 @@ export async function POST(request: NextRequest) {
         type: event.type,
         id: event.id,
         created: event.created,
+        isThinEvent: event.data && 'object' in event.data && event.data.object === 'event',
       }),
     });
 

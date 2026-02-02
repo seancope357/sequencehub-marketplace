@@ -5,10 +5,10 @@ const DOWNLOAD_SECRET = process.env.DOWNLOAD_SECRET || 'your-download-secret-key
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { '...': string[] } }
+  { params }: { params: { path: string[] } }
 ) {
   try {
-    const path = params['...'].join('/');
+    const path = params.path.join('/');
     const { searchParams } = new URL(request.url);
     const expires = searchParams.get('expires');
     const signature = searchParams.get('signature');

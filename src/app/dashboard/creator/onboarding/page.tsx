@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,7 @@ interface OnboardingStatus {
   canReceivePayments: boolean;
 }
 
-export default function CreatorOnboardingPage() {
+function CreatorOnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
@@ -331,5 +331,19 @@ export default function CreatorOnboardingPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function CreatorOnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    }>
+      <CreatorOnboardingContent />
+    </Suspense>
   );
 }
