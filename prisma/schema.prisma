@@ -24,6 +24,19 @@ model User {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Onboarding tracking
+  onboardingCompleted Boolean  @default(false)
+  onboardingStep      Int      @default(0)
+  onboardingData      String?  // JSON for progress tracking
+
+  // Legal acceptance tracking
+  tosAcceptedAt         DateTime?
+  tosVersion            String?
+  privacyAcceptedAt     DateTime?
+  privacyVersion        String?
+  sellerTermsAcceptedAt DateTime?
+  sellerTermsVersion    String?
+
   // Relations
   profile           Profile?
   roles             UserRole[]
@@ -33,6 +46,7 @@ model User {
   entitlements      Entitlement[]
   auditLogs         AuditLog[]
   downloadTokens    DownloadToken[]
+  legalAcceptances  LegalAcceptance[]
 }
 
 model Profile {
@@ -499,6 +513,10 @@ enum AuditAction {
   SECURITY_ALERT
   DOWNLOAD_TOKEN_CREATED
   DOWNLOAD_ACCESS_DENIED
+  LEGAL_ACCEPTED
+  ONBOARDING_STARTED
+  ONBOARDING_STEP_COMPLETED
+  ONBOARDING_COMPLETED
 }
 
 model AuditLog {
@@ -523,4 +541,48 @@ model AuditLog {
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+// ============================================
+// LEGAL DOCUMENTS & ACCEPTANCE
+// ============================================
+
+enum LegalDocType {
+  TERMS_OF_SERVICE
+  PRIVACY_POLICY
+  SELLER_AGREEMENT
+  REFUND_POLICY
+  COOKIE_POLICY
+}
+
+model LegalDocument {
+  id            String       @id @default(cuid())
+  type          LegalDocType
+  version       String
+  title         String
+  content       String       // Markdown content
+  effectiveDate DateTime
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([type, version])
+  @@index([type, isActive])
+}
+
+model LegalAcceptance {
+  id              String       @id @default(cuid())
+  userId          String
+  documentType    LegalDocType
+  documentVersion String
+  ipAddress       String?
+  userAgent       String?
+  acceptedAt      DateTime     @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentType, documentVersion])
+  @@index([userId])
+  @@index([documentType])
 }

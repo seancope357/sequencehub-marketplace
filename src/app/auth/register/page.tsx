@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Package, Mail, Lock, User, ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,12 +11,13 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store/auth-store';
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { refreshUser } = useAuthStore();
+  const { refreshUser, setUser } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,11 +47,16 @@ export default function RegisterPage() {
 
       if (response.ok) {
         const data = await response.json();
+
+        // Update auth store immediately with user data
+        setUser(data.user);
+
         toast.success(`Welcome, ${data.user.name || data.user.email}!`);
 
-        // Refresh auth store before redirecting
-        await refreshUser();
-        window.location.href = '/dashboard';
+        // Redirect to amazing onboarding flow
+        setTimeout(() => {
+          router.push('/onboarding');
+        }, 100);
       } else {
         const error = await response.json();
         toast.error(error.error || 'Registration failed');

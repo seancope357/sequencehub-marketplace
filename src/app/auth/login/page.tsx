@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Package, Mail, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,10 +11,11 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store/auth-store';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { refreshUser } = useAuthStore();
+  const { refreshUser, setUser } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,11 +35,17 @@ export default function LoginPage() {
 
       if (response.ok) {
         const data = await response.json();
+
+        // Update auth store immediately with user data
+        setUser(data.user);
+
+        // Show success message
         toast.success(`Welcome back, ${data.user.name || data.user.email}!`);
 
-        // Refresh auth store before redirecting
-        await refreshUser();
-        window.location.href = '/dashboard';
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 100);
       } else {
         const error = await response.json();
         toast.error(error.error || 'Login failed');
