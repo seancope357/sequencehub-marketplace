@@ -117,7 +117,27 @@ export default function HomePage() {
 
       <footer className="border-t bg-background">
         <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
-          <p>SequenceHUB • Built for the xLights Community</p>
+          <p className="mb-2">SequenceHUB • Built for the xLights Community</p>
+          <div className="flex items-center justify-center gap-4">
+            <button
+              className="hover:text-foreground underline underline-offset-4"
+              onClick={() => router.push('/legal/terms')}
+            >
+              Terms
+            </button>
+            <button
+              className="hover:text-foreground underline underline-offset-4"
+              onClick={() => router.push('/legal/privacy')}
+            >
+              Privacy
+            </button>
+            <button
+              className="hover:text-foreground underline underline-offset-4"
+              onClick={() => router.push('/legal/refunds')}
+            >
+              Refunds
+            </button>
+          </div>
         </div>
       </footer>
     </div>
