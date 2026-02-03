@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { registerUser } from '@/lib/supabase/auth';
+import { createAuditLog, getUserById } from '@/lib/supabase/auth';
+import { createRouteHandlerClient, applyCookieChanges } from '@/lib/supabase/route-handler';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import { sendWelcomeEmail } from '@/lib/email/send';
 
@@ -45,13 +46,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Register user
-    const { user, error } = await registerUser(email, password, name);
+    const { supabase, cookieChanges } = createRouteHandlerClient(request);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: name || email.split('@')[0],
+        },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`
+      }
+    });
 
-    if (error || !user) {
+    if (error || !data.user) {
       return NextResponse.json(
-        { error: error || 'User with this email already exists' },
+        { error: error?.message || 'User with this email already exists' },
         { status: 409 }
+      );
+    }
+
+    await createAuditLog({
+      userId: data.user.id,
+      action: 'USER_REGISTERED',
+      entityType: 'user',
+      entityId: data.user.id,
+    });
+
+    const user = await getUserById(data.user.id);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Failed to load user profile' },
+        { status: 500 }
       );
     }
 
@@ -66,7 +91,7 @@ export async function POST(request: NextRequest) {
       // Don't fail registration if email fails
     });
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         user: {
           id: user.id,
@@ -77,6 +102,9 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
+
+    applyCookieChanges(response, cookieChanges);
+    return response;
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loginUser } from '@/lib/supabase/auth';
+import { createAuditLog, getUserById } from '@/lib/supabase/auth';
+import { createRouteHandlerClient, applyCookieChanges } from '@/lib/supabase/route-handler';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
@@ -27,16 +28,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { user, error } = await loginUser(email, password);
+    const { supabase, cookieChanges } = createRouteHandlerClient(request);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    if (error || !user) {
+    if (error || !data.user) {
       return NextResponse.json(
-        { error: error || 'Invalid email or password' },
+        { error: error?.message || 'Invalid email or password' },
         { status: 401 }
       );
     }
 
-    return NextResponse.json(
+    await createAuditLog({
+      userId: data.user.id,
+      action: 'USER_LOGIN',
+      entityType: 'user',
+      entityId: data.user.id,
+    });
+
+    const user = await getUserById(data.user.id);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Failed to load user profile' },
+        { status: 500 }
+      );
+    }
+
+    const response = NextResponse.json(
       {
         user: {
           id: user.id,
@@ -47,6 +67,9 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     );
+
+    applyCookieChanges(response, cookieChanges);
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

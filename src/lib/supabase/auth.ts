@@ -383,6 +383,40 @@ export async function getAllUsers(): Promise<AuthUser[]> {
 }
 
 /**
+ * Get a single user by ID (Admin client)
+ */
+export async function getUserById(userId: string): Promise<AuthUser | null> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from('users')
+    .select(`
+      *,
+      roles:user_roles(id, role),
+      profile:profiles(*)
+    `)
+    .eq('id', userId)
+    .single();
+
+  if (error || !data) {
+    console.error('Failed to get user by id:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.name,
+    avatar: data.avatar,
+    emailVerified: data.email_verified || false,
+    roles: data.roles || [],
+    profile: data.profile || null,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at
+  };
+}
+
+/**
  * Delete user (ADMIN only)
  */
 export async function deleteUser(userId: string): Promise<{ error: string | null }> {
