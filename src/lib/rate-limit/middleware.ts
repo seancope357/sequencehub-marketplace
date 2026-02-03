@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';;
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { rateLimiter } from './limiter';
 import { RateLimitConfig, RateLimitKey } from './types';
 

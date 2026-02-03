@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';;
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
-import { createAuditLog } from '@/lib/auth';;
+import { createAuditLog } from '@/lib/supabase/auth';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function DELETE(

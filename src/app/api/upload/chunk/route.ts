@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';;
+import { getCurrentUser } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
 import { getUploadSession, updateUploadSession, storeChunk } from '@/lib/upload/session';
 import { validateChunkHash } from '@/lib/upload/validation';

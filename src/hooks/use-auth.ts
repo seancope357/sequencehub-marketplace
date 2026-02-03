@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { UserRole } from '@prisma/client';
-import { hasRole, isAdmin, isCreator, isCreatorOrAdmin } from '@/lib/auth-utils';;
+import { hasRole, isAdmin, isCreator, isCreatorOrAdmin } from '@/lib/auth-utils';
 
 export function useAuth() {
   const { user, isLoading, setUser, logout, refreshUser } = useAuthStore();
