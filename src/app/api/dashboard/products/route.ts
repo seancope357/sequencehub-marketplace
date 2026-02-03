@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
@@ -11,6 +12,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - Creator role required' },
+        { status: 403 }
       );
     }
 
@@ -63,6 +71,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - Creator role required' },
+        { status: 403 }
       );
     }
 
