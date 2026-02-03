@@ -1,11 +1,10 @@
 // Auth helpers for client-side role checks (Supabase Auth compatible)
-import { UserRole } from '@prisma/client';
-import type { AuthUser } from '@/lib/auth-types';
+import type { AuthUser, RoleName } from '@/lib/auth-types';
 
 /**
  * Check if user has a specific role
  */
-export function hasRole(user: AuthUser | null, role: UserRole): boolean {
+export function hasRole(user: AuthUser | null, role: RoleName): boolean {
   if (!user) return false;
   return user.roles.some((r) => r.role === role);
 }

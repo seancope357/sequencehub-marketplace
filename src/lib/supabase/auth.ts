@@ -3,44 +3,11 @@
  * Replaces custom JWT authentication with Supabase Auth
  */
 
-'use server';
+import 'server-only';
 
 import { createServerClient, createAdminClient } from './client';
-import { UserRole } from '@prisma/client';
+import type { AuthUser, RoleName } from '@/lib/auth-types';
 import { User as SupabaseUser } from '@supabase/supabase-js';
-
-// ============================================
-// TYPES
-// ============================================
-
-export interface AuthUser {
-  id: string;
-  email: string;
-  name?: string;
-  avatar?: string;
-  emailVerified: boolean;
-  roles: Role[];
-  profile?: Profile | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Role {
-  id: string;
-  role: UserRole;
-}
-
-export interface Profile {
-  id: string;
-  userId: string;
-  displayName: string;
-  bio?: string;
-  website?: string;
-  socialTwitter?: string;
-  socialYouTube?: string;
-  socialInstagram?: string;
-  location?: string;
-}
 
 // ============================================
 // USER MANAGEMENT
@@ -244,7 +211,7 @@ export async function updatePassword(newPassword: string): Promise<{ error: stri
  * Check if user has a specific role
  * Replaces: hasRole() from old auth.ts
  */
-export function hasRole(user: AuthUser | null, role: UserRole): boolean {
+export function hasRole(user: AuthUser | null, role: RoleName): boolean {
   if (!user) return false;
   return user.roles.some((r) => r.role === role);
 }
@@ -279,7 +246,7 @@ export function isCreatorOrAdmin(user: AuthUser | null): boolean {
  */
 export async function assignRole(
   userId: string,
-  role: UserRole
+  role: RoleName
 ): Promise<{ error: string | null }> {
   const supabase = createAdminClient();
 
@@ -313,7 +280,7 @@ export async function assignRole(
  */
 export async function removeRole(
   userId: string,
-  role: UserRole
+  role: RoleName
 ): Promise<{ error: string | null }> {
   const supabase = createAdminClient();
 
