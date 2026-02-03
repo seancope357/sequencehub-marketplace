@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Package,
+  Download,
   Calendar,
   Eye,
   FileText,
@@ -63,6 +64,39 @@ export default function Library() {
       toast.error('Failed to load purchases');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownload = async (entitlementId: string, fileVersionId: string) => {
+    try {
+      const response = await fetch('/api/library/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entitlementId, fileVersionId }),
+      });
+
+      if (!response.ok) {
+        toast.error('Failed to start download');
+        return;
+      }
+
+      const data = await response.json();
+      const downloadUrls = data.downloadUrls || [];
+      if (downloadUrls.length === 0) {
+        toast.error('No download links available');
+        return;
+      }
+
+      downloadUrls.forEach((item: { downloadUrl: string }) => {
+        if (item?.downloadUrl) {
+          window.open(item.downloadUrl, '_blank');
+        }
+      });
+
+      toast.success('Download started');
+    } catch (error) {
+      console.error('Error downloading:', error);
+      toast.error('Failed to start download');
     }
   };
 
@@ -204,6 +238,17 @@ export default function Library() {
                             </div>
                           )}
                         </div>
+                        <Button
+                          onClick={() =>
+                            purchase.version
+                              ? handleDownload(purchase.id, purchase.version.id)
+                              : undefined
+                          }
+                          disabled={!purchase.version}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
                       </div>
                     </div>
 

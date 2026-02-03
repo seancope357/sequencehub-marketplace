@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         fileName: file.fileName,
         fileSize: file.fileSize,
         fileType: file.fileType,
-        downloadUrl: `/api/media/${file.storageKey}?expires=${expires}&signature=${signature}`,
+        downloadUrl: `/api/media/${file.storageKey}?expires=${expires}&signature=${signature}&userId=${user.id}`,
       };
     });
 
