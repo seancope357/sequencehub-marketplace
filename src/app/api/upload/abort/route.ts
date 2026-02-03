@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get upload session
-    const session = getUploadSession(uploadId);
+    const session = await getUploadSession(uploadId);
     if (!session) {
       return NextResponse.json(
         { error: 'Upload session not found' },

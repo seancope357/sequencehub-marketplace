@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get upload session
-    const session = getUploadSession(uploadId);
+    const session = await getUploadSession(uploadId);
     if (!session) {
       return NextResponse.json(
         { error: 'Upload session not found' },
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Check if session expired
     if (session.expiresAt < new Date()) {
-      updateUploadSession(uploadId, { status: 'EXPIRED' });
+      await updateUploadSession(uploadId, { status: 'EXPIRED' });
       return NextResponse.json(
         { error: 'Upload session expired' },
         { status: 400 }
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
     const uploadedChunks = [...session.uploadedChunks, chunkIndex];
     const allChunksUploaded = uploadedChunks.length === session.totalChunks;
 
-    updateUploadSession(uploadId, {
+    await updateUploadSession(uploadId, {
       uploadedChunks,
       status: allChunksUploaded ? 'ALL_CHUNKS_UPLOADED' : 'UPLOADING',
     });

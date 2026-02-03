@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get upload session
-    const session = getUploadSession(uploadId);
+    const session = await getUploadSession(uploadId);
     if (!session) {
       return NextResponse.json(
         { error: 'Upload session not found' },
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update status to processing
-    updateUploadSession(uploadId, { status: 'PROCESSING' });
+    await updateUploadSession(uploadId, { status: 'PROCESSING' });
 
     // Combine chunks into final file
     const finalFilePath = getFinalFilePath(uploadId, session.fileName);
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Mark session complete then clean up
-    updateUploadSession(uploadId, { status: 'COMPLETED' });
+    await updateUploadSession(uploadId, { status: 'COMPLETED' });
     await deleteUploadSession(uploadId);
 
     const response: CompleteUploadResponse = {

@@ -6,51 +6,102 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { UploadSession, TEMP_UPLOAD_DIR, UPLOAD_SESSION_TTL } from './types';
+import { db } from '@/lib/db';
+import { uploadBuffer, downloadFile, deleteFile } from '@/lib/storage';
 
-// In-memory storage for upload sessions
-// In production, use Redis or database
-const uploadSessions = new Map<string, UploadSession>();
+const CHUNK_STORAGE_TYPE = 'ASSET' as const;
 
 /**
  * Create a new upload session
  */
 export async function createUploadSession(session: UploadSession): Promise<void> {
-  uploadSessions.set(session.uploadId, session);
-
-  // Ensure temp directory exists
-  const uploadDir = path.join(TEMP_UPLOAD_DIR, session.uploadId);
-  await fs.mkdir(uploadDir, { recursive: true });
+  await db.uploadSession.create({
+    data: {
+      id: session.uploadId,
+      userId: session.userId,
+      fileName: session.fileName,
+      fileSize: session.fileSize,
+      fileType: session.fileType,
+      mimeType: session.mimeType,
+      chunkSize: session.chunkSize,
+      totalChunks: session.totalChunks,
+      uploadedChunks: session.uploadedChunks,
+      status: session.status,
+      productId: session.productId,
+      versionId: session.versionId,
+      expiresAt: session.expiresAt,
+    },
+  });
 }
 
 /**
  * Get an upload session by ID
  */
-export function getUploadSession(uploadId: string): UploadSession | null {
-  return uploadSessions.get(uploadId) || null;
+export async function getUploadSession(uploadId: string): Promise<UploadSession | null> {
+  const session = await db.uploadSession.findUnique({
+    where: { id: uploadId },
+  });
+
+  if (!session) {
+    return null;
+  }
+
+  return {
+    uploadId: session.id,
+    userId: session.userId,
+    fileName: session.fileName,
+    fileSize: session.fileSize,
+    fileType: session.fileType,
+    mimeType: session.mimeType,
+    chunkSize: session.chunkSize,
+    totalChunks: session.totalChunks,
+    uploadedChunks: (session.uploadedChunks as number[]) || [],
+    status: session.status,
+    productId: session.productId || undefined,
+    versionId: session.versionId || undefined,
+    expiresAt: session.expiresAt,
+    createdAt: session.createdAt,
+  };
 }
 
 /**
  * Update an upload session
  */
-export function updateUploadSession(
+export async function updateUploadSession(
   uploadId: string,
   updates: Partial<UploadSession>
-): void {
-  const session = uploadSessions.get(uploadId);
-  if (!session) {
-    throw new Error('Upload session not found');
-  }
-
-  uploadSessions.set(uploadId, { ...session, ...updates });
+): Promise<void> {
+  await db.uploadSession.update({
+    where: { id: uploadId },
+    data: {
+      fileName: updates.fileName,
+      fileSize: updates.fileSize,
+      fileType: updates.fileType,
+      mimeType: updates.mimeType,
+      chunkSize: updates.chunkSize,
+      totalChunks: updates.totalChunks,
+      uploadedChunks: updates.uploadedChunks,
+      status: updates.status,
+      productId: updates.productId,
+      versionId: updates.versionId,
+      expiresAt: updates.expiresAt,
+    },
+  });
 }
 
 /**
  * Delete an upload session
  */
 export async function deleteUploadSession(uploadId: string): Promise<void> {
-  uploadSessions.delete(uploadId);
+  const session = await getUploadSession(uploadId);
+  if (session) {
+    await deleteStoredChunks(uploadId, session.uploadedChunks);
+  }
 
-  // Clean up temp directory
+  await db.uploadSession.delete({
+    where: { id: uploadId },
+  });
+
   const uploadDir = path.join(TEMP_UPLOAD_DIR, uploadId);
   try {
     await fs.rm(uploadDir, { recursive: true, force: true });
@@ -62,8 +113,8 @@ export async function deleteUploadSession(uploadId: string): Promise<void> {
 /**
  * Get chunk file path
  */
-export function getChunkPath(uploadId: string, chunkIndex: number): string {
-  return path.join(TEMP_UPLOAD_DIR, uploadId, `chunk_${chunkIndex}`);
+export function getChunkStorageKey(uploadId: string, chunkIndex: number): string {
+  return `uploads/${uploadId}/chunk_${chunkIndex}`;
 }
 
 /**
@@ -81,8 +132,11 @@ export async function storeChunk(
   chunkIndex: number,
   chunkData: Buffer
 ): Promise<void> {
-  const chunkPath = getChunkPath(uploadId, chunkIndex);
-  await fs.writeFile(chunkPath, chunkData);
+  const storageKey = getChunkStorageKey(uploadId, chunkIndex);
+  await uploadBuffer(chunkData, storageKey, {
+    contentType: 'application/octet-stream',
+    fileType: CHUNK_STORAGE_TYPE,
+  });
 }
 
 /**
@@ -93,12 +147,15 @@ export async function combineChunks(
   totalChunks: number,
   finalFilePath: string
 ): Promise<void> {
+  const uploadDir = path.join(TEMP_UPLOAD_DIR, uploadId);
+  await fs.mkdir(uploadDir, { recursive: true });
+
   const writeStream = await fs.open(finalFilePath, 'w');
 
   try {
     for (let i = 0; i < totalChunks; i++) {
-      const chunkPath = getChunkPath(uploadId, i);
-      const chunkData = await fs.readFile(chunkPath);
+      const storageKey = getChunkStorageKey(uploadId, i);
+      const chunkData = await downloadFile(storageKey, CHUNK_STORAGE_TYPE);
       await writeStream.write(chunkData);
     }
   } finally {
@@ -112,45 +169,60 @@ export async function combineChunks(
  */
 export async function cleanupExpiredSessions(): Promise<number> {
   const now = new Date();
-  let cleaned = 0;
+  const expiredSessions = await db.uploadSession.findMany({
+    where: {
+      expiresAt: { lt: now },
+    },
+    select: { id: true },
+  });
 
-  for (const [uploadId, session] of uploadSessions.entries()) {
-    if (session.expiresAt < now) {
-      await deleteUploadSession(uploadId);
-      cleaned++;
-    }
+  for (const session of expiredSessions) {
+    await deleteUploadSession(session.id);
   }
 
-  return cleaned;
+  return expiredSessions.length;
 }
 
 /**
  * Get session statistics
  */
 export function getSessionStats() {
-  const sessions = Array.from(uploadSessions.values());
-
-  return {
-    total: sessions.length,
-    byStatus: {
-      initiated: sessions.filter((s) => s.status === 'INITIATED').length,
-      uploading: sessions.filter((s) => s.status === 'UPLOADING').length,
-      allChunksUploaded: sessions.filter((s) => s.status === 'ALL_CHUNKS_UPLOADED').length,
-      processing: sessions.filter((s) => s.status === 'PROCESSING').length,
-      completed: sessions.filter((s) => s.status === 'COMPLETED').length,
-      aborted: sessions.filter((s) => s.status === 'ABORTED').length,
-      expired: sessions.filter((s) => s.status === 'EXPIRED').length,
-    },
-  };
+  return db.uploadSession
+    .findMany({
+      select: { status: true },
+    })
+    .then((sessions) => ({
+      total: sessions.length,
+      byStatus: {
+        initiated: sessions.filter((s) => s.status === 'INITIATED').length,
+        uploading: sessions.filter((s) => s.status === 'UPLOADING').length,
+        allChunksUploaded: sessions.filter((s) => s.status === 'ALL_CHUNKS_UPLOADED').length,
+        processing: sessions.filter((s) => s.status === 'PROCESSING').length,
+        completed: sessions.filter((s) => s.status === 'COMPLETED').length,
+        aborted: sessions.filter((s) => s.status === 'ABORTED').length,
+        expired: sessions.filter((s) => s.status === 'EXPIRED').length,
+      },
+    }));
 }
 
 /**
  * Abort an upload session
  */
 export async function abortUploadSession(uploadId: string): Promise<void> {
-  const session = getUploadSession(uploadId);
+  const session = await getUploadSession(uploadId);
   if (session) {
-    updateUploadSession(uploadId, { status: 'ABORTED' });
+    await updateUploadSession(uploadId, { status: 'ABORTED' });
   }
   await deleteUploadSession(uploadId);
+}
+
+async function deleteStoredChunks(uploadId: string, chunkIndices: number[]) {
+  for (const chunkIndex of chunkIndices) {
+    const storageKey = getChunkStorageKey(uploadId, chunkIndex);
+    try {
+      await deleteFile(storageKey, CHUNK_STORAGE_TYPE);
+    } catch (error) {
+      console.warn(`Failed to delete chunk ${chunkIndex} for ${uploadId}:`, error);
+    }
+  }
 }

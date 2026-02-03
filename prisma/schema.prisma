@@ -128,6 +128,18 @@ enum AuditAction {
   @@map("audit_action")
 }
 
+enum UploadStatus {
+  INITIATED
+  UPLOADING
+  ALL_CHUNKS_UPLOADED
+  PROCESSING
+  COMPLETED
+  ABORTED
+  EXPIRED
+
+  @@map("upload_status")
+}
+
 // ============================================
 // USER MANAGEMENT (Supabase Auth aligned)
 // ============================================
@@ -149,6 +161,7 @@ model User {
   entitlements   Entitlement[]
   auditLogs      AuditLog[]
   downloadTokens DownloadToken[]
+  uploadSessions UploadSession[]
 
   @@map("users")
 }
@@ -485,6 +498,31 @@ model DownloadToken {
   @@index([entitlementId])
   @@index([expiresAt])
   @@map("download_tokens")
+}
+
+model UploadSession {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid @map("user_id")
+  fileName       String       @map("file_name")
+  fileSize       Int          @map("file_size")
+  fileType       FileType     @map("file_type")
+  mimeType       String       @map("mime_type")
+  chunkSize      Int          @map("chunk_size")
+  totalChunks    Int          @map("total_chunks")
+  uploadedChunks Json         @map("uploaded_chunks")
+  status         UploadStatus @map("status")
+  productId      String?      @db.Uuid @map("product_id")
+  versionId      String?      @db.Uuid @map("version_id")
+  expiresAt      DateTime     @map("expires_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("upload_sessions")
 }
 
 model AccessLog {
