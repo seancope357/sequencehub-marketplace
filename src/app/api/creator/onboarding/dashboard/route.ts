@@ -6,10 +6,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
-import { createExpressDashboardLink } from '@/lib/stripe-connect';
+import { createExpressDashboardLink, getStripeConfigStatus } from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
+    const stripeConfig = getStripeConfigStatus();
+    if (!stripeConfig.configured) {
+      return NextResponse.json(
+        { error: stripeConfig.message || 'Stripe Connect is not configured.' },
+        { status: 409 }
+      );
+    }
+
     // 1. Authenticate user
     const user = await getCurrentUser();
     if (!user) {

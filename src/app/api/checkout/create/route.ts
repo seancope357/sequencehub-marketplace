@@ -3,6 +3,7 @@ import { getCurrentUser } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import Stripe from 'stripe';
+import { getStripeConfigStatus, StripeConfigError } from '@/lib/stripe-connect';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-12-18.acacia',
@@ -10,6 +11,14 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 export async function POST(request: NextRequest) {
   try {
+    const stripeConfig = getStripeConfigStatus();
+    if (!stripeConfig.configured) {
+      return NextResponse.json(
+        { error: stripeConfig.message || 'Stripe Connect is not configured.' },
+        { status: 409 }
+      );
+    }
+
     const user = await getCurrentUser();
 
     if (!user) {
@@ -165,6 +174,12 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error creating checkout session:', error);
+    if (error instanceof StripeConfigError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: 'Failed to create checkout session' },
       { status: 500 }

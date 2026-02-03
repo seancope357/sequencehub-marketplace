@@ -76,6 +76,9 @@ interface StripeOnboardingStatus {
   capabilitiesActive: boolean;
   needsOnboarding: boolean;
   canReceivePayments: boolean;
+  stripeConfigured?: boolean;
+  message?: string;
+  stripeError?: string;
 }
 
 const SIMPLE_UPLOAD_MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -515,33 +518,59 @@ export default function NewProductPage() {
         <div className="max-w-5xl mx-auto">
           {/* Stripe Account Requirement Banner */}
           {!stripeLoading && stripeStatus && !stripeStatus.canReceivePayments && (
-            <Alert variant="destructive" className="mb-6">
+            <Alert
+              className={`mb-6 ${
+                stripeStatus.stripeConfigured === false ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-red-500 bg-red-50 text-red-900'
+              }`}
+            >
               <AlertCircle className="h-5 w-5" />
-              <AlertTitle className="text-lg font-semibold">Stripe Account Required</AlertTitle>
+              <AlertTitle className="text-lg font-semibold">
+                {stripeStatus.stripeConfigured === false
+                  ? 'Stripe Connect Not Configured'
+                  : 'Stripe Account Required'}
+              </AlertTitle>
               <AlertDescription className="mt-2">
-                <p className="mb-3">
-                  You need to connect your Stripe account before you can sell products on SequenceHUB.
-                  This is required to receive payments from buyers.
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-white hover:bg-gray-50"
-                    onClick={() => router.push('/dashboard/creator/onboarding')}
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Set Up Stripe Account
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/10"
-                    onClick={checkStripeStatus}
-                  >
-                    Refresh Status
-                  </Button>
-                </div>
+                {stripeStatus.stripeConfigured === false ? (
+                  <>
+                    <p className="mb-3">
+                      {stripeStatus.message || 'Stripe Connect is not configured for this environment yet.'}
+                    </p>
+                    <p className="text-sm">
+                      Set `STRIPE_SECRET_KEY` (and `NEXT_PUBLIC_BASE_URL`) in your environment, then refresh.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mb-3">
+                      You need to connect your Stripe account before you can sell products on SequenceHUB.
+                      This is required to receive payments from buyers.
+                    </p>
+                    {stripeStatus.stripeError && (
+                      <p className="mb-3 text-sm">
+                        {stripeStatus.stripeError}
+                      </p>
+                    )}
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-white hover:bg-gray-50"
+                        onClick={() => router.push('/dashboard/creator/onboarding')}
+                      >
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Set Up Stripe Account
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-white hover:bg-white/10"
+                        onClick={checkStripeStatus}
+                      >
+                        Refresh Status
+                      </Button>
+                    </div>
+                  </>
+                )}
               </AlertDescription>
             </Alert>
           )}

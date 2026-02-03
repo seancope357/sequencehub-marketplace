@@ -17,6 +17,9 @@ interface OnboardingStatus {
   capabilitiesActive: boolean;
   needsOnboarding: boolean;
   canReceivePayments: boolean;
+  stripeConfigured?: boolean;
+  message?: string;
+  stripeError?: string;
 }
 
 function CreatorOnboardingContent() {
@@ -144,6 +147,28 @@ function CreatorOnboardingContent() {
         </p>
       </div>
 
+      {status?.stripeConfigured === false && (
+        <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">
+          <AlertTitle>Stripe Connect Not Configured</AlertTitle>
+          <AlertDescription className="mt-2">
+            {status.message || 'Stripe Connect is not configured for this environment yet.'}
+            <div className="mt-2 text-sm">
+              Set `STRIPE_SECRET_KEY` (and `NEXT_PUBLIC_BASE_URL`) in your environment,
+              then refresh this page.
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {status?.stripeError && (
+        <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">
+          <AlertTitle>Stripe Status Unavailable</AlertTitle>
+          <AlertDescription className="mt-2">
+            {status.stripeError}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {error && (
         <Alert variant="destructive" className="mb-6">
           <XCircle className="h-4 w-4" />
@@ -247,7 +272,7 @@ function CreatorOnboardingContent() {
                 <div className="flex gap-3">
                   <Button
                     onClick={handleStartOnboarding}
-                    disabled={actionLoading}
+                    disabled={actionLoading || status?.stripeConfigured === false}
                     className="flex-1"
                   >
                     {actionLoading ? (
