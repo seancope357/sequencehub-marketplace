@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { registerUser, createAuditLog } from '@/lib/auth';;
+import { registerUser } from '@/lib/supabase/auth';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import { sendWelcomeEmail } from '@/lib/email/send';
 
@@ -46,24 +46,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Register user
-    const user = await registerUser(email, password, name);
+    const { user, error } = await registerUser(email, password, name);
 
-    if (!user) {
+    if (error || !user) {
       return NextResponse.json(
-        { error: 'User with this email already exists' },
+        { error: error || 'User with this email already exists' },
         { status: 409 }
       );
     }
-
-    // Create audit log
-    await createAuditLog({
-      userId: user.id,
-      action: 'USER_CREATED',
-      entityType: 'user',
-      entityId: user.id,
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
-      userAgent: request.headers.get('user-agent') || undefined,
-    });
 
     // Send welcome email (fire and forget - don't block response)
     sendWelcomeEmail({

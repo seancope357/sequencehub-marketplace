@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, createAuditLog } from '@/lib/auth';;
+import { loginUser } from '@/lib/supabase/auth';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
@@ -27,25 +27,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create session
-    const user = await createSession(email, password);
+    const { user, error } = await loginUser(email, password);
 
-    if (!user) {
+    if (error || !user) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: error || 'Invalid email or password' },
         { status: 401 }
       );
     }
-
-    // Create audit log
-    await createAuditLog({
-      userId: user.id,
-      action: 'USER_LOGIN',
-      entityType: 'user',
-      entityId: user.id,
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
-      userAgent: request.headers.get('user-agent') || undefined,
-    });
 
     return NextResponse.json(
       {

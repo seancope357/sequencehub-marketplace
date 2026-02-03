@@ -1,42 +1,6 @@
-// Utility functions for authentication (no 'use server' - these are NOT Server Actions)
-import { User, UserRole } from '@prisma/client';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRY = '7d'; // 7 days
-
-export interface JWTPayload {
-  userId: string;
-  email: string;
-  roles: string[];
-}
-
-export interface AuthUser extends Omit<User, 'passwordHash'> {
-  roles: Role[];
-}
-
-export interface Role {
-  id: string;
-  role: UserRole;
-}
-
-/**
- * Generate a JWT token
- */
-export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-}
-
-/**
- * Verify a JWT token
- */
-export function verifyToken(token: string): JWTPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
-  } catch (error) {
-    return null;
-  }
-}
+// Auth helpers for client-side role checks (Supabase Auth compatible)
+import { UserRole } from '@prisma/client';
+import type { AuthUser } from '@/lib/auth-types';
 
 /**
  * Check if user has a specific role

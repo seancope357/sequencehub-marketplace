@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, clearAuthCookie, createAuditLog } from '@/lib/auth';;
+import { logoutUser } from '@/lib/supabase/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-
-    if (user) {
-      // Create audit log
-      await createAuditLog({
-        userId: user.id,
-        action: 'USER_LOGOUT',
-        entityType: 'user',
-        entityId: user.id,
-        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
-        userAgent: request.headers.get('user-agent') || undefined,
-      });
+    const { error } = await logoutUser();
+    if (error) {
+      return NextResponse.json(
+        { error },
+        { status: 500 }
+      );
     }
-
-    // Clear auth cookie
-    await clearAuthCookie();
 
     return NextResponse.json(
       { message: 'Logged out successfully' },
