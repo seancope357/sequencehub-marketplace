@@ -272,7 +272,7 @@ export function CreatorOnboarding() {
     },
     {
       id: 4,
-      title: 'You're All Set!',
+      title: "You\\'re All Set!",
       description: 'Review and launch your creator shop',
       icon: <Sparkles className="h-6 w-6" />,
       content: (
