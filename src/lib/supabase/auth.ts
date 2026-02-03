@@ -38,6 +38,10 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     .single();
 
   if (userError || !userData) {
+    const ensured = await ensureUserRecord(user);
+    if (ensured) {
+      return ensured;
+    }
     return null;
   }
 
@@ -52,6 +56,56 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     createdAt: userData.created_at,
     updatedAt: userData.updated_at
   };
+}
+
+/**
+ * Ensure public.users and default role exist for a Supabase Auth user.
+ * This is a safety net if the DB trigger wasn't applied or failed.
+ */
+export async function ensureUserRecord(
+  authUser: SupabaseUser
+): Promise<AuthUser | null> {
+  const admin = createAdminClient();
+
+  const name =
+    (authUser.user_metadata?.name as string | undefined) ||
+    authUser.email?.split('@')[0] ||
+    'User';
+
+  const avatar =
+    (authUser.user_metadata?.avatar as string | undefined) ||
+    (authUser.user_metadata?.picture as string | undefined) ||
+    null;
+
+  const { error: userError } = await admin
+    .from('users')
+    .upsert(
+      {
+        id: authUser.id,
+        email: authUser.email,
+        name,
+        avatar,
+      },
+      { onConflict: 'id' }
+    );
+
+  if (userError) {
+    console.error('Failed to upsert user record:', userError);
+    return null;
+  }
+
+  const { error: roleError } = await admin
+    .from('user_roles')
+    .upsert(
+      { user_id: authUser.id, role: 'BUYER' },
+      { onConflict: 'user_id,role' }
+    );
+
+  if (roleError) {
+    console.error('Failed to upsert user role:', roleError);
+  }
+
+  return getUserById(authUser.id);
 }
 
 /**

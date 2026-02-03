@@ -34,6 +34,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+import CryptoJS from 'crypto-js';
 
 interface UploadedFile {
   id: string;
@@ -76,6 +77,9 @@ interface StripeOnboardingStatus {
   needsOnboarding: boolean;
   canReceivePayments: boolean;
 }
+
+const SIMPLE_UPLOAD_MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB (must match server)
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -168,12 +172,28 @@ export default function NewProductPage() {
     setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
+  const updateFileState = (fileId: string, patch: Partial<UploadedFile>) => {
+    setUploadedFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, ...patch } : f))
+    );
+  };
+
   const uploadFileToStorage = async (uploadedFile: UploadedFile): Promise<void> => {
+    if (uploadedFile.file.size > SIMPLE_UPLOAD_MAX_SIZE) {
+      return uploadFileChunked(uploadedFile);
+    }
+
+    return uploadFileSimple(uploadedFile);
+  };
+
+  const uploadFileSimple = async (uploadedFile: UploadedFile): Promise<void> => {
     const formData = new FormData();
     formData.append('file', uploadedFile.file);
     formData.append('fileType', uploadedFile.fileType);
 
     try {
+      updateFileState(uploadedFile.id, { uploadProgress: 1, uploadError: undefined });
+
       const response = await fetch('/api/upload/simple', {
         method: 'POST',
         body: formData,
@@ -187,37 +207,109 @@ export default function NewProductPage() {
       const data = await response.json();
 
       // Update the file in state with upload results
-      setUploadedFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadedFile.id
-            ? {
-                ...f,
-                uploadedFileId: data.fileId || undefined,
-                storageKey: data.storageKey,
-                fileHash: data.fileHash,
-                mimeType: data.mimeType || f.file.type,
-                metadata: data.metadata || undefined,
-                sequenceLength: data.sequenceLength,
-                fps: data.fps,
-                channelCount: data.channelCount,
-                uploadProgress: 100,
-                uploadError: undefined,
-              }
-            : f
-        )
-      );
+      updateFileState(uploadedFile.id, {
+        uploadedFileId: data.fileId || undefined,
+        storageKey: data.storageKey,
+        fileHash: data.fileHash,
+        mimeType: data.mimeType || uploadedFile.file.type,
+        metadata: data.metadata || undefined,
+        sequenceLength: data.sequenceLength,
+        fps: data.fps,
+        channelCount: data.channelCount,
+        uploadProgress: 100,
+        uploadError: undefined,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
 
-      // Update file with error
-      setUploadedFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadedFile.id
-            ? { ...f, uploadError: errorMessage, uploadProgress: 0 }
-            : f
-        )
-      );
+      updateFileState(uploadedFile.id, { uploadError: errorMessage, uploadProgress: 0 });
 
+      throw error;
+    }
+  };
+
+  const uploadFileChunked = async (uploadedFile: UploadedFile): Promise<void> => {
+    try {
+      updateFileState(uploadedFile.id, { uploadProgress: 1, uploadError: undefined });
+
+      const initResponse = await fetch('/api/upload/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: uploadedFile.file.name,
+          fileSize: uploadedFile.file.size,
+          mimeType: uploadedFile.file.type || 'application/octet-stream',
+          uploadType: uploadedFile.fileType,
+        }),
+      });
+
+      if (!initResponse.ok) {
+        const error = await initResponse.json();
+        throw new Error(error.error || 'Failed to initiate upload');
+      }
+
+      const initData = await initResponse.json();
+      const totalChunks = initData.totalChunks as number;
+      const uploadId = initData.uploadId as string;
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, uploadedFile.file.size);
+        const chunk = uploadedFile.file.slice(start, end);
+        const chunkBuffer = await chunk.arrayBuffer();
+
+        const chunkHash = CryptoJS.MD5(
+          CryptoJS.lib.WordArray.create(chunkBuffer as ArrayBuffer)
+        ).toString();
+
+        const chunkForm = new FormData();
+        chunkForm.append('uploadId', uploadId);
+        chunkForm.append('chunkIndex', String(chunkIndex));
+        chunkForm.append('chunkHash', chunkHash);
+        chunkForm.append('chunk', new File([chunk], uploadedFile.file.name));
+
+        const chunkResponse = await fetch('/api/upload/chunk', {
+          method: 'POST',
+          body: chunkForm,
+        });
+
+        if (!chunkResponse.ok) {
+          const error = await chunkResponse.json();
+          throw new Error(error.error || `Failed to upload chunk ${chunkIndex + 1}`);
+        }
+
+        const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+        updateFileState(uploadedFile.id, { uploadProgress: progress });
+      }
+
+      const completeResponse = await fetch('/api/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadId }),
+      });
+
+      if (!completeResponse.ok) {
+        const error = await completeResponse.json();
+        throw new Error(error.error || 'Failed to complete upload');
+      }
+
+      const data = await completeResponse.json();
+
+      updateFileState(uploadedFile.id, {
+        uploadedFileId: data.fileId || undefined,
+        storageKey: data.storageKey,
+        fileHash: data.fileHash,
+        mimeType: data.mimeType || uploadedFile.file.type,
+        metadata: data.metadata || undefined,
+        sequenceLength: data.sequenceLength,
+        fps: data.fps,
+        channelCount: data.channelCount,
+        uploadProgress: 100,
+        uploadError: undefined,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      updateFileState(uploadedFile.id, { uploadError: errorMessage, uploadProgress: 0 });
       throw error;
     }
   };

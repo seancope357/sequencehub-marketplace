@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuditLog, getUserById } from '@/lib/supabase/auth';
+import { createAuditLog, ensureUserRecord } from '@/lib/supabase/auth';
 import { createRouteHandlerClient, applyCookieChanges } from '@/lib/supabase/route-handler';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       entityId: data.user.id,
     });
 
-    const user = await getUserById(data.user.id);
+    const user = await ensureUserRecord(data.user);
     if (!user) {
       return NextResponse.json(
         { error: 'Failed to load user profile' },
