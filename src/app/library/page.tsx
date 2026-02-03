@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Package,
-  Download,
   Calendar,
-  DollarSign,
   Eye,
   FileText,
 } from 'lucide-react';
@@ -39,16 +38,17 @@ interface Purchase {
 
 export default function Library() {
   const { user, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated) {
-      window.location.href = '/auth/login';
+      router.push('/auth/login');
       return;
     }
     loadPurchases();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router]);
 
   const loadPurchases = async () => {
     try {
@@ -63,28 +63,6 @@ export default function Library() {
       toast.error('Failed to load purchases');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleDownload = async (entitlementId: string, fileVersionId: string) => {
-    try {
-      const response = await fetch('/api/library/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entitlementId, fileVersionId }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Open download URL in new tab
-        window.open(data.downloadUrl, '_blank');
-        toast.success('Download started');
-      } else {
-        toast.error('Failed to start download');
-      }
-    } catch (error) {
-      console.error('Error downloading:', error);
-      toast.error('Failed to start download');
     }
   };
 
@@ -117,7 +95,7 @@ export default function Library() {
               <Package className="h-6 w-6 text-primary" />
               <span
                 className="font-semibold cursor-pointer"
-                onClick={() => (window.location.href = '/')}
+                onClick={() => router.push('/')}
               >
                 SequenceHUB
               </span>
@@ -125,11 +103,11 @@ export default function Library() {
               <span>My Library</span>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => (window.location.href = '/')}>
+              <Button variant="ghost" onClick={() => router.push('/')}>
                 Marketplace
               </Button>
               {user.roles.some((r) => r.role === 'CREATOR') && (
-                <Button variant="ghost" onClick={() => (window.location.href = '/dashboard')}>
+                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
                   Dashboard
                 </Button>
               )}
@@ -145,7 +123,7 @@ export default function Library() {
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">My Library</h1>
           <p className="text-muted-foreground">
-            Manage your purchased sequences and downloads
+            Manage your purchased sequences
           </p>
         </div>
 
@@ -157,7 +135,7 @@ export default function Library() {
               <p className="text-muted-foreground mb-4">
                 Start by exploring the marketplace
               </p>
-              <Button onClick={() => (window.location.href = '/')}>
+              <Button onClick={() => router.push('/')}>
                 Browse Marketplace
               </Button>
             </CardContent>
@@ -211,21 +189,21 @@ export default function Library() {
                     <div className="border rounded-lg p-4 bg-muted/50">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-semibold">
-                            Version {purchase.version.versionNumber} - {purchase.version.versionName}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            Published: {new Date(purchase.version.publishedAt).toLocaleDateString()}
-                          </div>
+                          {purchase.version ? (
+                            <>
+                              <div className="font-semibold">
+                                Version {purchase.version.versionNumber} - {purchase.version.versionName}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                Published: {new Date(purchase.version.publishedAt).toLocaleDateString()}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">
+                              Version details unavailable
+                            </div>
+                          )}
                         </div>
-                        <Button
-                          onClick={() =>
-                            handleDownload(purchase.id, purchase.version.id)
-                          }
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
                       </div>
                     </div>
 
@@ -234,9 +212,7 @@ export default function Library() {
                       <Button
                         variant="outline"
                         className="flex-1"
-                        onClick={() =>
-                          (window.location.href = `/p/${purchase.product.slug}`)
-                        }
+                        onClick={() => router.push(`/p/${purchase.product.slug}`)}
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         View Product

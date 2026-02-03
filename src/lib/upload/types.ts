@@ -35,10 +35,15 @@ export interface ChunkUploadResponse {
 }
 
 export interface CompleteUploadResponse {
-  fileId: string;
+  fileId?: string | null;
   storageKey: string;
   metadata: Record<string, any>;
   deduplicated: boolean;
+  fileHash?: string;
+  mimeType?: string;
+  sequenceLength?: number;
+  fps?: number;
+  channelCount?: number;
 }
 
 export interface UploadSession {

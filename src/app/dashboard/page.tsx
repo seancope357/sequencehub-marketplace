@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, ShoppingBag, DollarSign, BarChart3, Plus, LogOut, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Package, ShoppingBag, DollarSign, BarChart3, Plus, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,6 +17,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
     totalSales: 0,
@@ -29,11 +31,11 @@ export default function Dashboard() {
     if (authLoading) return;
 
     if (!isAuthenticated) {
-      window.location.href = '/auth/login';
+      router.push('/auth/login');
       return;
     }
     loadStats();
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, router]);
 
   const loadStats = async () => {
     try {
@@ -77,7 +79,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => (window.location.href = '/')}>
+              <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}>
                 SequenceHUB
               </span>
               <span className="text-muted-foreground">/</span>
@@ -90,7 +92,7 @@ export default function Dashboard() {
                 </div>
                 <span className="text-sm">{user.name || 'User'}</span>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => (window.location.href = '/')}>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
                 Marketplace
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
@@ -108,7 +110,7 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold">Creator Dashboard</h1>
             <p className="text-muted-foreground">Manage your products and sales</p>
           </div>
-          <Button onClick={() => (window.location.href = '/dashboard/products/new')}>
+          <Button onClick={() => router.push('/dashboard/products/new')}>
             <Plus className="h-4 w-4 mr-2" />
             New Product
           </Button>
@@ -160,13 +162,10 @@ export default function Dashboard() {
         {/* Dashboard Tabs */}
         <Tabs defaultValue="products" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="products" onClick={() => (window.location.href = '/dashboard/products')}>
+            <TabsTrigger value="products" onClick={() => router.push('/dashboard/products')}>
               Products
             </TabsTrigger>
-            <TabsTrigger value="orders" onClick={() => (window.location.href = '/dashboard/orders')}>
-              Orders
-            </TabsTrigger>
-            <TabsTrigger value="settings" onClick={() => (window.location.href = '/dashboard/settings')}>
+            <TabsTrigger value="settings" onClick={() => router.push('/dashboard/settings')}>
               Settings
             </TabsTrigger>
           </TabsList>
@@ -179,19 +178,6 @@ export default function Dashboard() {
               <CardContent>
                 <div className="text-center py-8 text-muted-foreground">
                   View all your products in the Products tab
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="orders" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Orders</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  View all your orders in the Orders tab
                 </div>
               </CardContent>
             </Card>

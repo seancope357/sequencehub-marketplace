@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Package, User, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,12 +9,13 @@ import { useAuth } from '@/hooks/use-auth';
 
 export default function SettingsPage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      window.location.href = '/auth/login';
+      router.push('/auth/login');
     }
-  }, [isAuthenticated, isLoading]);
+  }, [isAuthenticated, isLoading, router]);
 
   if (isLoading || !user) {
     return (
@@ -31,14 +33,14 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => (window.location.href = '/')}>
+              <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}>
                 SequenceHUB
               </span>
               <span className="text-muted-foreground">/</span>
               <span>Settings</span>
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => (window.location.href = '/dashboard')}>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')}>
                 Dashboard
               </Button>
               <Button variant="outline" size="sm" onClick={logout}>
@@ -80,21 +82,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Coming Soon */}
-          <Card>
-            <CardHeader>
-              <CardTitle>More Settings Coming Soon</CardTitle>
-              <CardDescription>We're working on additional settings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>• Update profile information</li>
-                <li>• Change password</li>
-                <li>• Notification preferences</li>
-                <li>• Stripe Connect settings</li>
-              </ul>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </div>

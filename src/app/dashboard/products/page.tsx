@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Package,
   Plus,
-  Edit,
   Trash2,
   MoreVertical,
   Eye,
@@ -56,6 +56,7 @@ interface Product {
 
 export default function DashboardProducts() {
   const { user, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; product: Product | null }>({
@@ -65,11 +66,11 @@ export default function DashboardProducts() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      window.location.href = '/auth/login';
+      router.push('/auth/login');
       return;
     }
     loadProducts();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router]);
 
   const loadProducts = async () => {
     try {
@@ -148,7 +149,7 @@ export default function DashboardProducts() {
               <Package className="h-6 w-6 text-primary" />
               <span
                 className="font-semibold cursor-pointer"
-                onClick={() => (window.location.href = '/')}
+                onClick={() => router.push('/')}
               >
                 SequenceHUB
               </span>
@@ -156,10 +157,10 @@ export default function DashboardProducts() {
               <span>Dashboard / Products</span>
             </div>
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => (window.location.href = '/dashboard')}>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')}>
                 Dashboard
               </Button>
-              <Button onClick={() => (window.location.href = '/dashboard/products/new')}>
+              <Button onClick={() => router.push('/dashboard/products/new')}>
                 <Plus className="h-4 w-4 mr-2" />
                 New Product
               </Button>
@@ -188,7 +189,7 @@ export default function DashboardProducts() {
                 <p className="text-muted-foreground mb-4">
                   Start by creating your first product
                 </p>
-                <Button onClick={() => (window.location.href = '/dashboard/products/new')}>
+                <Button onClick={() => router.push('/dashboard/products/new')}>
                   <Plus className="h-4 w-4 mr-2" />
                   Create Product
                 </Button>
@@ -255,17 +256,7 @@ export default function DashboardProducts() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() =>
-                                  (window.location.href = `/dashboard/products/${product.id}/edit`)
-                                }
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  (window.location.href = `/p/${product.slug}`)
-                                }
+                                onClick={() => router.push(`/p/${product.slug}`)}
                               >
                                 <Eye className="h-4 w-4 mr-2" />
                                 View

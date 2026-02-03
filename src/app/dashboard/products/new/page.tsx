@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Package,
   Upload,
@@ -43,6 +44,12 @@ interface UploadedFile {
   uploadProgress?: number;
   uploadedFileId?: string;
   storageKey?: string;
+  fileHash?: string;
+  mimeType?: string;
+  metadata?: Record<string, any>;
+  sequenceLength?: number;
+  fps?: number;
+  channelCount?: number;
   uploadError?: string;
 }
 
@@ -71,6 +78,7 @@ interface StripeOnboardingStatus {
 }
 
 export default function NewProductPage() {
+  const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -108,11 +116,11 @@ export default function NewProductPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      window.location.href = '/auth/login';
+      router.push('/auth/login');
       return;
     }
     checkStripeStatus();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router]);
 
   const checkStripeStatus = async () => {
     try {
@@ -184,8 +192,14 @@ export default function NewProductPage() {
           f.id === uploadedFile.id
             ? {
                 ...f,
-                uploadedFileId: data.fileId,
+                uploadedFileId: data.fileId || undefined,
                 storageKey: data.storageKey,
+                fileHash: data.fileHash,
+                mimeType: data.mimeType || f.file.type,
+                metadata: data.metadata || undefined,
+                sequenceLength: data.sequenceLength,
+                fps: data.fps,
+                channelCount: data.channelCount,
                 uploadProgress: 100,
                 uploadError: undefined,
               }
@@ -307,9 +321,16 @@ export default function NewProductPage() {
           files: uploadedFiles.map((f) => ({
             fileId: f.uploadedFileId,
             fileName: f.fileName,
+            originalName: f.file.name,
             fileType: f.fileType,
             fileSize: f.fileSize,
             storageKey: f.storageKey,
+            fileHash: f.fileHash,
+            mimeType: f.mimeType,
+            metadata: f.metadata,
+            sequenceLength: f.sequenceLength,
+            fps: f.fps,
+            channelCount: f.channelCount,
           })),
         }),
       });
@@ -321,7 +342,7 @@ export default function NewProductPage() {
             ? 'Product published successfully!'
             : 'Product saved as draft'
         );
-        window.location.href = `/dashboard/products/${data.product.id}/edit`;
+        router.push('/dashboard/products');
       } else {
         const error = await response.json();
         toast.error(error.error || 'Failed to save product');
@@ -370,7 +391,7 @@ export default function NewProductPage() {
               <Package className="h-6 w-6 text-primary" />
               <span
                 className="font-semibold cursor-pointer"
-                onClick={() => (window.location.href = '/')}
+                onClick={() => router.push('/')}
               >
                 SequenceHUB
               </span>
@@ -381,7 +402,7 @@ export default function NewProductPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.location.href === '/dashboard/products/new' ? '/dashboard' : window.location.href}
+                onClick={() => router.push('/dashboard/products')}
               >
                 Back to Products
               </Button>
@@ -415,7 +436,7 @@ export default function NewProductPage() {
                     variant="outline"
                     size="sm"
                     className="bg-white hover:bg-gray-50"
-                    onClick={() => window.location.href = '/dashboard/creator/onboarding'}
+                    onClick={() => router.push('/dashboard/creator/onboarding')}
                   >
                     <CreditCard className="h-4 w-4 mr-2" />
                     Set Up Stripe Account
@@ -1029,7 +1050,7 @@ export default function NewProductPage() {
                                 variant="outline"
                                 size="sm"
                                 className="mt-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-                                onClick={() => window.location.href = '/dashboard/creator/onboarding'}
+                                onClick={() => router.push('/dashboard/creator/onboarding')}
                               >
                                 <CreditCard className="h-4 w-4 mr-2" />
                                 Set Up Stripe Now

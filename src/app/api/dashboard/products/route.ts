@@ -133,6 +133,25 @@ export async function POST(request: NextRequest) {
       .replace(/-+/g, '-')
       .substring(0, 100);
 
+    // Validate files payload (if present)
+    if (Array.isArray(files) && files.length > 0) {
+      for (const file of files) {
+        if (!file?.fileName || !file?.fileType || !file?.fileSize) {
+          return NextResponse.json(
+            { error: 'Each file must include fileName, fileType, and fileSize' },
+            { status: 400 }
+          );
+        }
+
+        if (!file?.storageKey || !file?.fileHash) {
+          return NextResponse.json(
+            { error: 'Each file must include storageKey and fileHash' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     // Create product
     const product = await db.product.create({
       data: {
@@ -163,31 +182,28 @@ export async function POST(request: NextRequest) {
             versionName: '1.0.0',
             isLatest: true,
             publishedAt: status === 'PUBLISHED' ? new Date() : null,
-            files: {
-              create: files.map((file: any) => ({
-                fileName: file.fileName,
-                originalName: file.fileName,
-                fileType: file.fileType,
-                fileSize: file.fileSize,
-                fileHash: generateFileHash(),
-                storageKey: generateStorageKey(slug, file.fileName),
-                mimeType: getMimeType(file.fileName),
-              })),
-            },
+            files: files.length
+              ? {
+                  create: files.map((file: any) => ({
+                    fileName: file.fileName,
+                    originalName: file.originalName || file.fileName,
+                    fileType: file.fileType,
+                    fileSize: file.fileSize,
+                    fileHash: file.fileHash,
+                    storageKey: file.storageKey,
+                    mimeType: file.mimeType || getMimeType(file.fileName),
+                    metadata: file.metadata
+                      ? typeof file.metadata === 'string'
+                        ? file.metadata
+                        : JSON.stringify(file.metadata)
+                      : null,
+                    sequenceLength: file.sequenceLength,
+                    fps: file.fps,
+                    channelCount: file.channelCount,
+                  })),
+                }
+              : undefined,
           },
-        },
-        media: {
-          create: [
-            {
-              mediaType: 'cover',
-              fileName: 'cover.jpg',
-              originalName: 'cover.jpg',
-              fileSize: 0,
-              fileHash: 'placeholder',
-              storageKey: `covers/${slug}.jpg`,
-              mimeType: 'image/jpeg',
-            },
-          ],
         },
       },
     });
@@ -224,15 +240,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function generateFileHash(): string {
-  // Generate a random hash for now (in production, use actual file hash)
-  return `hash-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-}
-
-function generateStorageKey(productSlug: string, fileName: string): string {
-  return `products/${productSlug}/${Date.now()}/${fileName}`;
 }
 
 function getMimeType(fileName: string): string {

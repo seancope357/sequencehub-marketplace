@@ -144,6 +144,11 @@ export async function POST(request: NextRequest) {
         fileId: duplicate.id,
         storageKey: duplicate.storageKey,
         metadata: duplicate.metadata ? JSON.parse(duplicate.metadata) : {},
+        fileHash: duplicate.fileHash,
+        mimeType: duplicate.mimeType,
+        sequenceLength: duplicate.sequenceLength,
+        fps: duplicate.fps,
+        channelCount: duplicate.channelCount,
         deduplicated: true,
       });
     }
@@ -177,31 +182,37 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create ProductFile record
-    const productFile = await db.productFile.create({
-      data: {
-        versionId: versionId || 'temp', // Will be linked later if temp
-        fileName,
-        originalName: fileName,
-        fileType,
-        fileSize,
-        fileHash,
-        storageKey,
-        mimeType,
-        metadata: metadata ? JSON.stringify(metadata) : null,
-        sequenceLength: metadata?.sequenceLength,
-        fps: metadata?.fps,
-        channelCount: metadata?.channelCount,
-      },
-    });
+    let productFileId: string | null = null;
+
+    // Only create ProductFile if we have a versionId to attach it to
+    if (versionId) {
+      const productFile = await db.productFile.create({
+        data: {
+          versionId,
+          fileName,
+          originalName: fileName,
+          fileType,
+          fileSize,
+          fileHash,
+          storageKey,
+          mimeType,
+          metadata: metadata ? JSON.stringify(metadata) : null,
+          sequenceLength: metadata?.sequenceLength,
+          fps: metadata?.fps,
+          channelCount: metadata?.channelCount,
+        },
+      });
+
+      productFileId = productFile.id;
+    }
 
     // Log to audit trail
     await db.auditLog.create({
       data: {
         userId: user.id,
         action: AuditAction.FILE_UPLOADED,
-        entityType: 'product_file',
-        entityId: productFile.id,
+        entityType: productFileId ? 'product_file' : 'upload_file',
+        entityId: productFileId || storageKey,
         metadata: JSON.stringify({
           fileName,
           fileSize,
@@ -209,6 +220,7 @@ export async function POST(request: NextRequest) {
           fileHash,
           storageKey,
           hasMetadata: !!metadata,
+          linkedToVersion: Boolean(versionId),
         }),
         ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
         userAgent: request.headers.get('user-agent'),
@@ -225,9 +237,14 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      fileId: productFile.id,
+      fileId: productFileId,
       storageKey,
       metadata: metadata || {},
+      fileHash,
+      mimeType,
+      sequenceLength: metadata?.sequenceLength,
+      fps: metadata?.fps,
+      channelCount: metadata?.channelCount,
       deduplicated: false,
     });
   } catch (error) {

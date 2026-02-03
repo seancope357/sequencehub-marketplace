@@ -1,19 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Package,
   Download,
   Clock,
   CheckCircle,
   AlertCircle,
-  Star,
-  User,
-  Share2,
-  Heart,
   ShoppingCart,
-  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -72,11 +67,11 @@ interface Product {
 export default function ProductPage() {
   const params = useParams();
   const slug = params.slug as string;
-  const { isAuthenticated, user } = useAuth();
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState(0);
 
   useEffect(() => {
     if (slug) {
@@ -105,7 +100,7 @@ export default function ProductPage() {
   const handleBuyNow = async () => {
     if (!isAuthenticated) {
       toast.error('Please login to purchase');
-      window.location.href = '/auth/login';
+      router.push('/auth/login');
       return;
     }
 
@@ -117,13 +112,12 @@ export default function ProductPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: product.id,
-          priceId: product.id, // Will be updated to actual price ID
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        window.location.href = data.checkoutUrl;
+        window.location.assign(data.checkoutUrl);
       } else {
         toast.error('Failed to create checkout session');
       }
@@ -183,7 +177,7 @@ export default function ProductPage() {
             <p className="text-muted-foreground mb-4">
               The product you're looking for doesn't exist or has been removed.
             </p>
-            <Button onClick={() => (window.location.href = '/')}>
+            <Button onClick={() => router.push('/')}>
               Back to Marketplace
             </Button>
           </CardContent>
@@ -192,8 +186,6 @@ export default function ProductPage() {
     );
   }
 
-  const coverImage = product.media.find((m) => m.mediaType === 'cover');
-  const galleryImages = product.media.filter((m) => m.mediaType === 'gallery');
 
   return (
     <div className="min-h-screen bg-background">
@@ -203,12 +195,12 @@ export default function ProductPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => (window.location.href = '/')}>
+              <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}>
                 SequenceHUB
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => (window.location.href = '/')}>
+              <Button variant="ghost" onClick={() => router.push('/')}>
                 Back to Marketplace
               </Button>
             </div>
@@ -223,44 +215,16 @@ export default function ProductPage() {
             <Card>
               <CardContent className="p-0">
                 <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
-                  {coverImage ? (
-                    <img
-                      src={`/api/media/${coverImage.storageKey}`}
-                      alt={product.title}
-                      className="object-cover w-full h-full"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Package className="h-24 w-24 text-muted-foreground" />
-                    </div>
-                  )}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Package className="h-24 w-24 text-muted-foreground" />
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {galleryImages.length > 0 && (
-              <div className="grid grid-cols-4 gap-2">
-                {galleryImages.map((image, index) => (
-                  <Card
-                    key={image.id}
-                    className={`cursor-pointer transition-all ${
-                      selectedImage === index ? 'ring-2 ring-primary' : ''
-                    }`}
-                    onClick={() => setSelectedImage(index)}
-                  >
-                    <CardContent className="p-1">
-                      <div className="aspect-video bg-muted rounded overflow-hidden">
-                        <img
-                          src={`/api/media/${image.storageKey}`}
-                          alt={`${product.title} ${index + 1}`}
-                          className="object-cover w-full h-full"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <div className="text-sm text-muted-foreground">
+              No preview images available.
+            </div>
           </div>
 
           {/* Right: Product Info */}
@@ -285,20 +249,14 @@ export default function ProductPage() {
             {/* Creator Info */}
             <Card>
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-sm font-semibold">
-                      {product.creator.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-semibold">{product.creator.name}</div>
-                      <div className="text-sm text-muted-foreground">Creator</div>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-sm font-semibold">
+                    {product.creator.name.charAt(0).toUpperCase()}
                   </div>
-                  <Button variant="outline" size="sm">
-                    <User className="h-4 w-4 mr-2" />
-                    View Profile
-                  </Button>
+                  <div>
+                    <div className="font-semibold">{product.creator.name}</div>
+                    <div className="text-sm text-muted-foreground">Creator</div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -316,20 +274,12 @@ export default function ProductPage() {
                       {product.licenseType === 'PERSONAL' && 'Personal License'}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="icon">
-                      <Heart className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                  </div>
                 </div>
 
                 {product.purchased ? (
-                  <Button className="w-full" size="lg" disabled>
+                  <Button className="w-full" size="lg" onClick={() => router.push('/library')}>
                     <CheckCircle className="h-5 w-5 mr-2" />
-                    Purchased
+                    Go to Library
                   </Button>
                 ) : (
                   <Button className="w-full" size="lg" onClick={handleBuyNow}>
