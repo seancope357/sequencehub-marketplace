@@ -29,14 +29,20 @@ export function createRouteHandlerClient(request: NextRequest) {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll().map((cookie) => ({
+            name: cookie.name,
+            value: cookie.value,
+          }));
         },
-        set(name: string, value: string, options: Record<string, any>) {
-          cookieChanges.push({ name, value, options });
-        },
-        remove(name: string, options: Record<string, any>) {
-          cookieChanges.push({ name, value: '', options });
+        setAll(cookiesToSet) {
+          for (const cookie of cookiesToSet) {
+            cookieChanges.push({
+              name: cookie.name,
+              value: cookie.value,
+              options: cookie.options,
+            });
+          }
         },
       },
     }

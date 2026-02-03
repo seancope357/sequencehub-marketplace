@@ -6,6 +6,8 @@
 import 'server-only';
 
 import { createServerClient, createAdminClient } from './client';
+import type { NextRequest } from 'next/server';
+import { createRouteHandlerClient } from './route-handler';
 import type { AuthUser, RoleName } from '@/lib/auth-types';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -43,6 +45,61 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       return ensured;
     }
     return null;
+  }
+
+  return {
+    id: user.id,
+    email: user.email!,
+    name: userData.name,
+    avatar: userData.avatar,
+    emailVerified: user.email_confirmed_at !== null,
+    roles: userData.roles || [],
+    profile: userData.profile || null,
+    createdAt: userData.created_at,
+    updatedAt: userData.updated_at
+  };
+}
+
+/**
+ * Get current user for Route Handlers using request cookies.
+ */
+export async function getCurrentUserFromRequest(
+  request: NextRequest
+): Promise<AuthUser | null> {
+  const { supabase } = createRouteHandlerClient(request);
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return null;
+  }
+
+  // Reuse existing logic for profile lookup and fallback
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select(`
+      *,
+      roles:user_roles(id, role),
+      profile:profiles(*)
+    `)
+    .eq('id', user.id)
+    .single();
+
+  if (userError || !userData) {
+    const ensured = await ensureUserRecord(user);
+    if (ensured) {
+      return ensured;
+    }
+    return {
+      id: user.id,
+      email: user.email!,
+      name: (user.user_metadata?.name as string | undefined),
+      avatar: (user.user_metadata?.avatar as string | undefined),
+      emailVerified: user.email_confirmed_at !== null,
+      roles: [],
+      profile: null,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at ?? user.created_at,
+    };
   }
 
   return {

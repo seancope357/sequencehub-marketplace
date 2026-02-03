@@ -65,14 +65,24 @@ export async function createServerClient(): Promise<SupabaseClient<Database>> {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll().map((cookie) => ({
+            name: cookie.name,
+            value: cookie.value,
+          }));
         },
-        set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options });
-        },
-        remove(name: string, options: any) {
-          cookieStore.set({ name, value: '', ...options });
+        setAll(cookiesToSet) {
+          try {
+            for (const cookie of cookiesToSet) {
+              cookieStore.set({
+                name: cookie.name,
+                value: cookie.value,
+                ...cookie.options,
+              });
+            }
+          } catch {
+            // Ignore if called from a Server Component where cookies are read-only
+          }
         },
       },
     }

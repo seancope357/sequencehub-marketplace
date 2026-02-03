@@ -65,12 +65,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await createAuditLog({
-      userId: data.user.id,
-      action: 'USER_REGISTERED',
-      entityType: 'user',
-      entityId: data.user.id,
-    });
+    try {
+      await createAuditLog({
+        userId: data.user.id,
+        action: 'USER_REGISTERED',
+        entityType: 'user',
+        entityId: data.user.id,
+      });
+    } catch (auditError) {
+      console.warn('Register audit log failed:', auditError);
+    }
 
     const user = await ensureUserRecord(data.user);
     if (!user) {
@@ -103,6 +107,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
 
+    response.headers.set('Cache-Control', 'no-store');
     applyCookieChanges(response, cookieChanges);
     return response;
   } catch (error) {

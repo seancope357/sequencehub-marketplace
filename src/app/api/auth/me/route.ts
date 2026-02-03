@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { getCurrentUserFromRequest } from '@/lib/supabase/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUserFromRequest(request);
 
     if (!user) {
       return NextResponse.json(
