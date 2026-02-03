@@ -88,6 +88,12 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (creatorAccount.onboardingStatus !== 'COMPLETED') {
+      return NextResponse.json(
+        { error: 'Creator onboarding not complete' },
+        { status: 400 }
+      );
+    }
 
     // Create Stripe checkout session
     const sessionParams: Stripe.Checkout.SessionCreateParams = {

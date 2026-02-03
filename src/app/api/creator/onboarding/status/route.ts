@@ -4,7 +4,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
 import { getAccountStatus } from '@/lib/stripe-connect';
@@ -20,15 +19,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 2. Verify user has CREATOR role
-    if (!isCreatorOrAdmin(user)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
-      );
-    }
-
-    // 3. Get creator account from database
+    // 2. Get creator account from database
     const creatorAccount = await db.creatorAccount.findUnique({
       where: { userId: user.id },
     });

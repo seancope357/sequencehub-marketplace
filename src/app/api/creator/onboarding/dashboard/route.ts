@@ -4,7 +4,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
 import { createExpressDashboardLink } from '@/lib/stripe-connect';
@@ -20,15 +19,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 2. Verify user has CREATOR role
-    if (!isCreatorOrAdmin(user)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
-      );
-    }
-
-    // 3. Get creator account
+    // 2. Get creator account
     const creatorAccount = await db.creatorAccount.findUnique({
       where: { userId: user.id },
     });
@@ -40,7 +31,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 4. Check if onboarding is complete
+    // 3. Check if onboarding is complete
     if (creatorAccount.onboardingStatus !== 'COMPLETED') {
       return NextResponse.json(
         { error: 'Onboarding not complete - finish setup first' },
@@ -48,10 +39,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 5. Generate Express Dashboard link
+    // 4. Generate Express Dashboard link
     const dashboardUrl = await createExpressDashboardLink(creatorAccount.stripeAccountId);
 
-    // 6. Log dashboard access
+    // 5. Log dashboard access
     await createAuditLog({
       userId: user.id,
       action: 'STRIPE_DASHBOARD_ACCESSED',
@@ -64,7 +55,7 @@ export async function GET(request: NextRequest) {
       userAgent: request.headers.get('user-agent') || undefined,
     });
 
-    // 7. Return dashboard URL
+    // 6. Return dashboard URL
     return NextResponse.json(
       {
         success: true,
