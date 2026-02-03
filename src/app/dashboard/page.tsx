@@ -16,7 +16,7 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, logout, isCreatorOrAdmin } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0,
@@ -34,8 +34,12 @@ export default function Dashboard() {
       router.push('/auth/login');
       return;
     }
-    loadStats();
-  }, [isAuthenticated, authLoading, router]);
+    if (isCreatorOrAdmin) {
+      loadStats();
+    } else {
+      setIsLoadingStats(false);
+    }
+  }, [isAuthenticated, authLoading, isCreatorOrAdmin, router]);
 
   const loadStats = async () => {
     try {
@@ -107,57 +111,83 @@ export default function Dashboard() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold">Creator Dashboard</h1>
-            <p className="text-muted-foreground">Manage your products and sales</p>
+            <h1 className="text-3xl font-bold">
+              {isCreatorOrAdmin ? 'Creator Dashboard' : 'Dashboard'}
+            </h1>
+            <p className="text-muted-foreground">
+              {isCreatorOrAdmin ? 'Manage your products and sales' : 'Welcome to your account'}
+            </p>
           </div>
-          <Button onClick={() => router.push('/dashboard/products/new')}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Product
-          </Button>
+          {isCreatorOrAdmin ? (
+            <Button onClick={() => router.push('/dashboard/products/new')}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Product
+            </Button>
+          ) : (
+            <Button onClick={() => router.push('/dashboard/creator/onboarding')}>
+              <Plus className="h-4 w-4 mr-2" />
+              Start Selling
+            </Button>
+          )}
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalProducts}</div>
-            </CardContent>
-          </Card>
+        {isCreatorOrAdmin ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalProducts}</div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-              <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalSales}</div>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+                <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalSales}</div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Downloads</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Total Downloads</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalDownloads}</div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Start Selling</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalDownloads}</div>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Connect Stripe to receive payouts and publish your first sequence.
+              </p>
+              <Button onClick={() => router.push('/dashboard/creator/onboarding')}>
+                Connect Stripe
+              </Button>
             </CardContent>
           </Card>
-        </div>
+        )}
 
         {/* Dashboard Tabs */}
         <Tabs defaultValue="products" className="space-y-4">

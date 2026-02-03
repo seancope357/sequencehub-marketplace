@@ -54,9 +54,9 @@ export default function RegisterPage() {
 
         toast.success(`Welcome, ${data.user.name || data.user.email}!`);
 
-        // Redirect to amazing onboarding flow
+        // Redirect to dashboard
         setTimeout(() => {
-          router.push('/onboarding');
+          router.push('/dashboard');
         }, 100);
       } else {
         const error = await response.json();
