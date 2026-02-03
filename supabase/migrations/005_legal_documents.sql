@@ -61,7 +61,7 @@ BEGIN
     FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'LegalDocument'
   ) THEN
-    EXECUTE 'DROP TABLE public.\"LegalDocument\" CASCADE';
+    EXECUTE 'DROP TABLE public."LegalDocument" CASCADE';
   END IF;
 
   IF EXISTS (
@@ -69,7 +69,7 @@ BEGIN
     FROM information_schema.tables
     WHERE table_schema = 'public' AND table_name = 'LegalAcceptance'
   ) THEN
-    EXECUTE 'DROP TABLE public.\"LegalAcceptance\" CASCADE';
+    EXECUTE 'DROP TABLE public."LegalAcceptance" CASCADE';
   END IF;
 END $$;
 
