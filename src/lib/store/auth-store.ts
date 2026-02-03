@@ -23,7 +23,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          await fetch('/api/auth/logout', { method: 'POST' });
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
           set({ user: null, isLoading: false });
         } catch (error) {
           console.error('Logout error:', error);
@@ -33,7 +33,10 @@ export const useAuthStore = create<AuthState>()(
       refreshUser: async () => {
         try {
           set({ isLoading: true });
-          const response = await fetch('/api/auth/me');
+          const response = await fetch('/api/auth/me', {
+            credentials: 'include',
+            cache: 'no-store',
+          });
           if (response.ok) {
             const data = await response.json();
             set({ user: data.user, isLoading: false });
