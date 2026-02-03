@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isCreatorOrAdmin } from '@/lib/supabase/auth-utils';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
 import { createExpressDashboardLink } from '@/lib/stripe-connect';
