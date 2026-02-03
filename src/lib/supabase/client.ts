@@ -27,12 +27,16 @@ export type Database = {
 // CONFIGURATION
 // ============================================
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+function getSupabaseConfig() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables');
+  }
+
+  return { supabaseUrl, supabaseAnonKey, supabaseServiceKey };
 }
 
 // ============================================
@@ -44,6 +48,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * Use in Client Components only
  */
 export function createClient(): SupabaseClient<Database> {
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
 }
 
@@ -52,6 +57,7 @@ export function createClient(): SupabaseClient<Database> {
  * Handles cookies automatically
  */
 export async function createServerClient(): Promise<SupabaseClient<Database>> {
+  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   const cookieStore = await cookies();
 
   return createSupabaseServerClient<Database>(
@@ -79,6 +85,8 @@ export async function createServerClient(): Promise<SupabaseClient<Database>> {
  * WARNING: This bypasses RLS policies!
  */
 export function createAdminClient(): SupabaseClient<Database> {
+  const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+
   if (!supabaseServiceKey) {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
   }
