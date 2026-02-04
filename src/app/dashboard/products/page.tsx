@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface Product {
   id: string;
@@ -141,33 +142,7 @@ export default function DashboardProducts() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span
-                className="font-semibold cursor-pointer"
-                onClick={() => router.push('/')}
-              >
-                SequenceHUB
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span>Dashboard / Products</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard')}>
-                Dashboard
-              </Button>
-              <Button onClick={() => router.push('/dashboard/products/new')}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Product
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="Dashboard / Products" browseLabel="Marketplace" browseHref="/" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
@@ -175,6 +150,10 @@ export default function DashboardProducts() {
             <h1 className="text-3xl font-bold">My Products</h1>
             <p className="text-muted-foreground">Manage your xLights sequences</p>
           </div>
+          <Button onClick={() => router.push('/dashboard/products/new')}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Product
+          </Button>
         </div>
 
         <Card>

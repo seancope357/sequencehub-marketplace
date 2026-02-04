@@ -18,6 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface Product {
   id: string;
@@ -189,24 +190,7 @@ export default function ProductPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}>
-                SequenceHUB
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => router.push('/')}>
-                Back to Marketplace
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader browseLabel="Browse" browseHref="/browse" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Package } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface Product {
   id: string;
@@ -59,24 +60,7 @@ export default function BrowsePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}
-              >
-                SequenceHUB
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span>Browse</span>
-            </div>
-            <Button variant="outline" onClick={() => router.push('/auth/register')}>
-              Start Selling
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="Browse" showBrowse={false} />
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto mb-8">

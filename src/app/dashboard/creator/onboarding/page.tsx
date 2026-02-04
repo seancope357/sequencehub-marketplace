@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle2, XCircle, Loader2, ExternalLink, RefreshCw, CreditCard } from 'lucide-react';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface OnboardingStatus {
   hasAccount: boolean;
@@ -139,13 +140,15 @@ function CreatorOnboardingContent() {
   }
 
   return (
-    <div className="container mx-auto py-8 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Stripe Connect Setup</h1>
-        <p className="text-muted-foreground">
-          Connect your Stripe account to receive payments from your product sales
-        </p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <AppHeader contextLabel="Stripe Connect" browseLabel="Marketplace" browseHref="/" />
+      <div className="container mx-auto py-8 max-w-4xl">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Stripe Connect Setup</h1>
+          <p className="text-muted-foreground">
+            Connect your Stripe account to receive payments from your product sales
+          </p>
+        </div>
 
       {status?.stripeConfigured === false && (
         <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">

@@ -5,37 +5,14 @@ import { Package, Upload, Shield, ArrowRight, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 export default function HomePage() {
   const router = useRouter();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-secondary/20">
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold">SequenceHUB</h1>
-                <p className="text-xs text-muted-foreground">xLights Marketplace</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => router.push('/auth/login')}>
-                Login
-              </Button>
-              <Button variant="outline" onClick={() => router.push('/browse')}>
-                Browse
-              </Button>
-              <Button onClick={() => router.push('/auth/register')} className="gap-2">
-                <Upload className="h-4 w-4" />
-                Start Selling
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <section className="relative overflow-hidden">
         <div className="container mx-auto px-4 py-16 md:py-24">

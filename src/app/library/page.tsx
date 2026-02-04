@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface Purchase {
   id: string;
@@ -38,7 +39,7 @@ interface Purchase {
 }
 
 export default function Library() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -121,37 +122,7 @@ export default function Library() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span
-                className="font-semibold cursor-pointer"
-                onClick={() => router.push('/')}
-              >
-                SequenceHUB
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span>My Library</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => router.push('/')}>
-                Marketplace
-              </Button>
-              {user.roles.some((r) => r.role === 'CREATOR') && (
-                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
-                  Dashboard
-                </Button>
-              )}
-              <Button variant="outline" onClick={logout}>
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="My Library" browseLabel="Browse" browseHref="/browse" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
