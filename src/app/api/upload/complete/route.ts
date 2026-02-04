@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
         fileType: session.fileType,
         uploadId,
       },
+      fileType: session.fileType,
     });
 
     let productFileId: string | null = null;

@@ -158,7 +158,7 @@ export default function NewProductPage() {
 
       if (ext === 'fseq') fileType = 'RENDERED';
       else if (ext === 'xsq' || ext === 'xml') fileType = 'SOURCE';
-      else if (['mp4', 'mov', 'gif'].includes(ext || '')) fileType = 'PREVIEW';
+      else if (['mp4', 'mov', 'webm', 'gif'].includes(ext || '')) fileType = 'PREVIEW';
 
       return {
         id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
@@ -254,11 +254,12 @@ export default function NewProductPage() {
 
       const initData = await initResponse.json();
       const totalChunks = initData.totalChunks as number;
+      const chunkSize = typeof initData.chunkSize === 'number' ? initData.chunkSize : CHUNK_SIZE;
       const uploadId = initData.uploadId as string;
 
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, uploadedFile.file.size);
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, uploadedFile.file.size);
         const chunk = uploadedFile.file.slice(start, end);
         const chunkBuffer = await chunk.arrayBuffer();
 
@@ -321,7 +322,7 @@ export default function NewProductPage() {
   const uploadAllFiles = async (): Promise<boolean> => {
     if (uploadedFiles.length === 0) return true;
 
-    const filesToUpload = uploadedFiles.filter((f) => !f.uploadedFileId);
+    const filesToUpload = uploadedFiles.filter((f) => !f.storageKey || !f.fileHash);
     if (filesToUpload.length === 0) return true;
 
     let uploadsFailed = false;
@@ -356,6 +357,9 @@ export default function NewProductPage() {
       return;
     }
 
+    const hasRenderedFile = uploadedFiles.some((file) => file.fileType === 'RENDERED');
+    const hasSourceFile = uploadedFiles.some((file) => file.fileType === 'SOURCE');
+
     if (!title.trim()) {
       toast.error('Title is required');
       return;
@@ -373,6 +377,26 @@ export default function NewProductPage() {
 
     if (price === '' || parseFloat(price) < 0) {
       toast.error('Valid price is required');
+      return;
+    }
+
+    if (includesFSEQ && !hasRenderedFile) {
+      toast.error('You enabled FSEQ but did not upload any .fseq files');
+      return;
+    }
+
+    if (!includesFSEQ && hasRenderedFile) {
+      toast.error('You uploaded a .fseq file. Enable FSEQ or remove the file.');
+      return;
+    }
+
+    if (includesSource && !hasSourceFile) {
+      toast.error('You enabled Source but did not upload any .xsq/.xml files');
+      return;
+    }
+
+    if (!includesSource && hasSourceFile) {
+      toast.error('You uploaded a source file. Enable Source or remove the file.');
       return;
     }
 
@@ -414,7 +438,9 @@ export default function NewProductPage() {
           licenseType,
           seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
           status: publish ? 'PUBLISHED' : 'DRAFT',
-          files: uploadedFiles.map((f) => ({
+          files: uploadedFiles
+            .filter((f) => f.storageKey && f.fileHash)
+            .map((f) => ({
             fileId: f.uploadedFileId,
             fileName: f.fileName,
             originalName: f.file.name,
@@ -800,7 +826,7 @@ export default function NewProductPage() {
                             multiple
                             onChange={handleFileUpload}
                             className="hidden"
-                            accept=".fseq,.xsq,.xml,.mp4,.mov,.gif,.png,.jpg,.jpeg"
+                            accept=".fseq,.xsq,.xml,.mp4,.mov,.webm,.gif,.png,.jpg,.jpeg,.mp3,.wav,.ogg,.xmodel"
                           />
                           <label
                             htmlFor="file-upload"
@@ -811,7 +837,7 @@ export default function NewProductPage() {
                               Click to upload or drag files here
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              Supports: .fseq, .xsq, .xml, .mp4, .mov, .gif, .png, .jpg, .jpeg
+                              Supports: .fseq, .xsq, .xml, .mp4, .mov, .webm, .gif, .png, .jpg, .jpeg, .mp3, .wav, .ogg, .xmodel
                             </p>
                           </label>
                         </div>

@@ -180,6 +180,7 @@ export async function POST(request: NextRequest) {
         originalName: fileName,
         fileType,
       },
+      fileType,
     });
 
     let productFileId: string | null = null;

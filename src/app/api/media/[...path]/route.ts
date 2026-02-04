@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { downloadFile } from '@/lib/storage';
+import { downloadFile, type FileType as StorageFileType } from '@/lib/storage';
 import { db } from '@/lib/db';
 
 const DOWNLOAD_SECRET = process.env.DOWNLOAD_SECRET || 'your-download-secret-key';
@@ -58,6 +58,7 @@ export async function GET(
         fileName: true,
         originalName: true,
         mimeType: true,
+        fileType: true,
       },
     });
 
@@ -68,7 +69,7 @@ export async function GET(
       );
     }
 
-    const buffer = await downloadFile(storageKey);
+    const buffer = await downloadFile(storageKey, fileRecord.fileType as StorageFileType);
 
     const fileName = fileRecord.originalName || fileRecord.fileName;
 
