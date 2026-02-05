@@ -3,15 +3,7 @@ import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { generateDownloadUrl } from '@/lib/storage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { AdminMediaDeleteButton } from '@/components/admin/AdminMediaDeleteButton';
+import { AdminMediaReorderList } from '@/components/admin/AdminMediaReorderList';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,44 +64,7 @@ export default async function AdminProductMediaPage({
           <CardTitle>Product Media</CardTitle>
         </CardHeader>
         <CardContent>
-          {mediaWithUrls.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No media attached to this product.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Preview</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Order</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mediaWithUrls.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div className="h-16 w-16 overflow-hidden rounded border bg-muted">
-                        {item.url ? (
-                          item.mimeType?.startsWith('video/') ? (
-                            <video src={item.url} className="h-full w-full object-cover" />
-                          ) : (
-                            <img src={item.url} alt={item.fileName} className="h-full w-full object-cover" />
-                          )
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>{item.mediaType}</TableCell>
-                    <TableCell>{item.displayOrder}</TableCell>
-                    <TableCell>{new Date(item.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right">
-                      <AdminMediaDeleteButton mediaId={item.id} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <AdminMediaReorderList productId={product.id} media={mediaWithUrls} />
         </CardContent>
       </Card>
     </div>
