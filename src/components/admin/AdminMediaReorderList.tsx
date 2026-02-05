@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -104,6 +104,8 @@ export function AdminMediaReorderList({ productId, media }: AdminMediaReorderLis
     [...media].sort((a, b) => a.displayOrder - b.displayOrder)
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const saveTimeoutRef = useRef<number | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -125,6 +127,13 @@ export function AdminMediaReorderList({ productId, media }: AdminMediaReorderLis
       }));
       return reordered;
     });
+    setIsDirty(true);
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = window.setTimeout(() => {
+      void handleSaveOrder();
+    }, 300);
   };
 
   const handleSaveOrder = async () => {
@@ -148,6 +157,7 @@ export function AdminMediaReorderList({ productId, media }: AdminMediaReorderLis
       }
 
       toast.success('Media order saved');
+      setIsDirty(false);
     } catch (error) {
       console.error('Save order error:', error);
       toast.error('Failed to save order');
@@ -164,11 +174,11 @@ export function AdminMediaReorderList({ productId, media }: AdminMediaReorderLis
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Drag items to change display order.
+          Drag items to change display order. Changes auto-save.
         </p>
         <Button onClick={handleSaveOrder} disabled={isSaving}>
           <Save className="h-4 w-4 mr-2" />
-          {isSaving ? 'Saving...' : 'Save Order'}
+          {isSaving ? 'Saving...' : isDirty ? 'Save Order' : 'Saved'}
         </Button>
       </div>
 
