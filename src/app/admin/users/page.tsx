@@ -8,10 +8,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { AdminUserRoleActions } from '@/components/admin/AdminUserRoleActions';
+import { getCurrentUser } from '@/lib/supabase/auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminUsersPage() {
+  const currentUser = await getCurrentUser();
   const users = await db.user.findMany({
     take: 50,
     orderBy: { createdAt: 'desc' },
@@ -42,6 +45,7 @@ export default async function AdminUsersPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Roles</TableHead>
                   <TableHead>Joined</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -55,6 +59,13 @@ export default async function AdminUsersPage() {
                         : user.roles.map((role) => role.role).join(', ')}
                     </TableCell>
                     <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <AdminUserRoleActions
+                        userId={user.id}
+                        roles={user.roles.map((role) => role.role)}
+                        isSelf={currentUser?.id === user.id}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

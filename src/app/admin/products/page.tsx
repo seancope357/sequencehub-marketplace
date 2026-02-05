@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { AdminProductStatusActions } from '@/components/admin/AdminProductStatusActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +56,7 @@ export default async function AdminProductsPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -69,6 +71,12 @@ export default async function AdminProductsPage() {
                       {formatCurrency(product.prices[0]?.amount || 0)}
                     </TableCell>
                     <TableCell>{new Date(product.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <AdminProductStatusActions
+                        productId={product.id}
+                        status={product.status}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
