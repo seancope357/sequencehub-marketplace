@@ -134,8 +134,16 @@ export const FILE_TYPE_CONFIGS: Record<FileType, FileUploadConfig> = {
   },
   PREVIEW: {
     maxFileSize: 200 * 1024 * 1024, // 200MB
-    allowedExtensions: ['.mp4', '.webm', '.mov', '.gif'],
-    allowedMimeTypes: ['video/mp4', 'video/webm', 'video/quicktime', 'image/gif'],
+    allowedExtensions: ['.mp4', '.webm', '.mov', '.gif', '.jpg', '.jpeg', '.png', '.webp'],
+    allowedMimeTypes: [
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+      'image/gif',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ],
     validateMagicBytes: false,
   },
 };

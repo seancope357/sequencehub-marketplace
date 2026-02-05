@@ -55,6 +55,20 @@ interface UploadedFile {
   uploadError?: string;
 }
 
+interface UploadedMedia {
+  id: string;
+  file: File;
+  fileName: string;
+  fileSize: number;
+  fileType: 'PREVIEW';
+  mediaType: 'cover' | 'gallery' | 'preview';
+  uploadProgress?: number;
+  storageKey?: string;
+  fileHash?: string;
+  mimeType?: string;
+  uploadError?: string;
+}
+
 const CATEGORIES = [
   { value: 'CHRISTMAS', label: 'Christmas' },
   { value: 'HALLOWEEN', label: 'Halloween' },
@@ -118,6 +132,8 @@ export default function NewProductPage() {
 
   // Files
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [coverMedia, setCoverMedia] = useState<UploadedMedia | null>(null);
+  const [galleryMedia, setGalleryMedia] = useState<UploadedMedia[]>([]);
 
   // Preview mode
   const [showPreview, setShowPreview] = useState(false);
@@ -183,12 +199,30 @@ export default function NewProductPage() {
     );
   };
 
+  const updateCoverMedia = (patch: Partial<UploadedMedia>) => {
+    setCoverMedia((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const updateGalleryMedia = (fileId: string, patch: Partial<UploadedMedia>) => {
+    setGalleryMedia((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, ...patch } : f))
+    );
+  };
+
   const uploadFileToStorage = async (uploadedFile: UploadedFile): Promise<void> => {
     if (uploadedFile.file.size > SIMPLE_UPLOAD_MAX_SIZE) {
       return uploadFileChunked(uploadedFile);
     }
 
     return uploadFileSimple(uploadedFile);
+  };
+
+  const uploadMediaToStorage = async (mediaFile: UploadedMedia): Promise<void> => {
+    if (mediaFile.file.size > SIMPLE_UPLOAD_MAX_SIZE) {
+      return uploadMediaChunked(mediaFile);
+    }
+
+    return uploadMediaSimple(mediaFile);
   };
 
   const uploadFileSimple = async (uploadedFile: UploadedFile): Promise<void> => {
@@ -230,6 +264,52 @@ export default function NewProductPage() {
       updateFileState(uploadedFile.id, { uploadError: errorMessage, uploadProgress: 0 });
 
       throw error;
+    }
+  };
+
+  const uploadMediaSimple = async (mediaFile: UploadedMedia): Promise<void> => {
+    const formData = new FormData();
+    formData.append('file', mediaFile.file);
+    formData.append('fileType', mediaFile.fileType);
+
+    try {
+      if (mediaFile.mediaType === 'cover') {
+        updateCoverMedia({ uploadProgress: 1, uploadError: undefined });
+      } else {
+        updateGalleryMedia(mediaFile.id, { uploadProgress: 1, uploadError: undefined });
+      }
+
+      const response = await fetch('/api/upload/simple', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload media');
+      }
+
+      const patch = {
+        storageKey: data.storageKey,
+        fileHash: data.fileHash,
+        mimeType: data.mimeType || mediaFile.file.type,
+        uploadProgress: 100,
+        uploadError: undefined,
+      };
+
+      if (mediaFile.mediaType === 'cover') {
+        updateCoverMedia(patch);
+      } else {
+        updateGalleryMedia(mediaFile.id, patch);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      if (mediaFile.mediaType === 'cover') {
+        updateCoverMedia({ uploadError: errorMessage, uploadProgress: 0 });
+      } else {
+        updateGalleryMedia(mediaFile.id, { uploadError: errorMessage, uploadProgress: 0 });
+      }
     }
   };
 
@@ -320,6 +400,99 @@ export default function NewProductPage() {
     }
   };
 
+  const uploadMediaChunked = async (mediaFile: UploadedMedia): Promise<void> => {
+    try {
+      if (mediaFile.mediaType === 'cover') {
+        updateCoverMedia({ uploadProgress: 1, uploadError: undefined });
+      } else {
+        updateGalleryMedia(mediaFile.id, { uploadProgress: 1, uploadError: undefined });
+      }
+
+      const initResponse = await fetch('/api/upload/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: mediaFile.file.name,
+          fileSize: mediaFile.file.size,
+          mimeType: mediaFile.file.type || 'application/octet-stream',
+          uploadType: mediaFile.fileType,
+        }),
+      });
+
+      const initData = await initResponse.json();
+      if (!initResponse.ok) {
+        throw new Error(initData.error || 'Failed to initiate upload');
+      }
+
+      const uploadId = initData.uploadId as string;
+      const chunkSize = initData.chunkSize as number;
+      const totalChunks = initData.totalChunks as number;
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, mediaFile.file.size);
+        const chunk = mediaFile.file.slice(start, end);
+        const chunkBuffer = Buffer.from(await chunk.arrayBuffer());
+        const chunkHash = CryptoJS.MD5(CryptoJS.lib.WordArray.create(chunkBuffer)).toString();
+
+        const chunkForm = new FormData();
+        chunkForm.append('uploadId', uploadId);
+        chunkForm.append('chunkIndex', chunkIndex.toString());
+        chunkForm.append('chunkHash', chunkHash);
+        chunkForm.append('chunk', new File([chunk], mediaFile.file.name));
+
+        const chunkResponse = await fetch('/api/upload/chunk', {
+          method: 'POST',
+          body: chunkForm,
+        });
+
+        if (!chunkResponse.ok) {
+          const error = await chunkResponse.json();
+          throw new Error(error.error || `Failed to upload chunk ${chunkIndex + 1}`);
+        }
+
+        const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+        if (mediaFile.mediaType === 'cover') {
+          updateCoverMedia({ uploadProgress: progress });
+        } else {
+          updateGalleryMedia(mediaFile.id, { uploadProgress: progress });
+        }
+      }
+
+      const completeResponse = await fetch('/api/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uploadId }),
+      });
+
+      const data = await completeResponse.json();
+      if (!completeResponse.ok) {
+        throw new Error(data.error || 'Failed to complete upload');
+      }
+
+      const patch = {
+        storageKey: data.storageKey,
+        fileHash: data.fileHash,
+        mimeType: data.mimeType || mediaFile.file.type,
+        uploadProgress: 100,
+        uploadError: undefined,
+      };
+
+      if (mediaFile.mediaType === 'cover') {
+        updateCoverMedia(patch);
+      } else {
+        updateGalleryMedia(mediaFile.id, patch);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      if (mediaFile.mediaType === 'cover') {
+        updateCoverMedia({ uploadError: errorMessage, uploadProgress: 0 });
+      } else {
+        updateGalleryMedia(mediaFile.id, { uploadError: errorMessage, uploadProgress: 0 });
+      }
+    }
+  };
+
   const uploadAllFiles = async (): Promise<boolean> => {
     if (uploadedFiles.length === 0) return true;
 
@@ -349,6 +522,67 @@ export default function NewProductPage() {
     }
 
     return !uploadsFailed;
+  };
+
+  const uploadAllMedia = async (): Promise<boolean> => {
+    const mediaItems = [
+      ...(coverMedia ? [coverMedia] : []),
+      ...galleryMedia,
+    ].filter((item) => !item.storageKey || !item.fileHash);
+
+    if (mediaItems.length === 0) return true;
+
+    let uploadsFailed = false;
+
+    for (const mediaFile of mediaItems) {
+      try {
+        if (mediaFile.mediaType === 'cover') {
+          updateCoverMedia({ uploadProgress: 1 });
+        } else {
+          updateGalleryMedia(mediaFile.id, { uploadProgress: 1 });
+        }
+        await uploadMediaToStorage(mediaFile);
+      } catch (error) {
+        uploadsFailed = true;
+        toast.error(`Failed to upload ${mediaFile.fileName}`);
+      }
+    }
+
+    return !uploadsFailed;
+  };
+
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCoverMedia({
+      id: `${Date.now()}-cover`,
+      file,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: 'PREVIEW',
+      mediaType: 'cover',
+    });
+  };
+
+  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newItems: UploadedMedia[] = Array.from(files).map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      file,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: 'PREVIEW',
+      mediaType: 'gallery',
+    }));
+
+    setGalleryMedia((prev) => [...prev, ...newItems]);
+  };
+
+  const removeGalleryItem = (fileId: string) => {
+    setGalleryMedia((prev) => prev.filter((item) => item.id !== fileId));
   };
 
   const handleSave = async (publish: boolean = false) => {
@@ -421,6 +655,14 @@ export default function NewProductPage() {
         }
       }
 
+      if ((coverMedia || galleryMedia.length > 0)) {
+        const mediaSuccess = await uploadAllMedia();
+        if (!mediaSuccess) {
+          toast.error('Some media failed to upload. Please try again.');
+          return;
+        }
+      }
+
       // Step 2: Create product with uploaded file IDs
       const response = await fetch('/api/dashboard/products', {
         method: 'POST',
@@ -455,6 +697,32 @@ export default function NewProductPage() {
             fps: f.fps,
             channelCount: f.channelCount,
           })),
+          media: [
+            ...(coverMedia && coverMedia.storageKey && coverMedia.fileHash
+              ? [{
+                  fileName: coverMedia.fileName,
+                  originalName: coverMedia.file.name,
+                  fileSize: coverMedia.fileSize,
+                  storageKey: coverMedia.storageKey,
+                  fileHash: coverMedia.fileHash,
+                  mimeType: coverMedia.mimeType,
+                  mediaType: 'cover',
+                  displayOrder: 0,
+                }]
+              : []),
+            ...galleryMedia
+              .filter((m) => m.storageKey && m.fileHash)
+              .map((m, index) => ({
+                fileName: m.fileName,
+                originalName: m.file.name,
+                fileSize: m.fileSize,
+                storageKey: m.storageKey,
+                fileHash: m.fileHash,
+                mimeType: m.mimeType,
+                mediaType: m.mediaType,
+                displayOrder: index + 1,
+              })),
+          ],
         }),
       });
 
@@ -711,9 +979,10 @@ export default function NewProductPage() {
           ) : (
             /* Edit Mode */
             <Tabs defaultValue="basic" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="files">Files</TabsTrigger>
+                <TabsTrigger value="media">Media</TabsTrigger>
                 <TabsTrigger value="metadata">xLights</TabsTrigger>
                 <TabsTrigger value="pricing">Pricing</TabsTrigger>
                 <TabsTrigger value="license">License</TabsTrigger>
@@ -903,6 +1172,151 @@ export default function NewProductPage() {
                           <p className="text-sm">
                             Add files or enable at least one file type (FSEQ or Source)
                           </p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Media Tab */}
+              <TabsContent value="media" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Product Media</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="cover-upload">Cover Image / Video</Label>
+                      <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                        <input
+                          id="cover-upload"
+                          type="file"
+                          onChange={handleCoverUpload}
+                          className="hidden"
+                          accept=".png,.jpg,.jpeg,.webp,.gif,.mp4,.mov,.webm"
+                        />
+                        <label htmlFor="cover-upload" className="cursor-pointer block">
+                          <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                          <p className="text-sm font-semibold">Upload a cover image or short preview</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Supported: .png, .jpg, .jpeg, .webp, .gif, .mp4, .mov, .webm
+                          </p>
+                        </label>
+                      </div>
+
+                      {coverMedia && (
+                        <div className="flex items-center justify-between p-3 border rounded">
+                          <div className="flex items-center gap-3 flex-1">
+                            {coverMedia.uploadProgress && coverMedia.uploadProgress > 0 ? (
+                              coverMedia.uploadProgress === 100 ? (
+                                <Check className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                              )
+                            ) : coverMedia.uploadError ? (
+                              <X className="h-5 w-5 text-destructive" />
+                            ) : (
+                              <Package className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium">{coverMedia.fileName}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {coverMedia.uploadError ? (
+                                  <span className="text-destructive">{coverMedia.uploadError}</span>
+                                ) : coverMedia.uploadProgress === 100 ? (
+                                  <span className="text-green-600">✓ Uploaded successfully</span>
+                                ) : coverMedia.uploadProgress ? (
+                                  <span>Uploading...</span>
+                                ) : (
+                                  formatFileSize(coverMedia.fileSize)
+                                )}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-xs">Cover</Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setCoverMedia(null)}
+                            disabled={coverMedia.uploadProgress !== undefined && coverMedia.uploadProgress > 0 && coverMedia.uploadProgress < 100}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gallery-upload">Gallery Images</Label>
+                      <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                        <input
+                          id="gallery-upload"
+                          type="file"
+                          multiple
+                          onChange={handleGalleryUpload}
+                          className="hidden"
+                          accept=".png,.jpg,.jpeg,.webp,.gif"
+                        />
+                        <label htmlFor="gallery-upload" className="cursor-pointer block">
+                          <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                          <p className="text-sm font-semibold">Upload gallery images</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Supported: .png, .jpg, .jpeg, .webp, .gif
+                          </p>
+                        </label>
+                      </div>
+
+                      {galleryMedia.length > 0 && (
+                        <div className="space-y-2">
+                          <Label>Gallery Items</Label>
+                          <div className="space-y-2">
+                            {galleryMedia.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-center justify-between p-3 border rounded"
+                              >
+                                <div className="flex items-center gap-3 flex-1">
+                                  {item.uploadProgress && item.uploadProgress > 0 ? (
+                                    item.uploadProgress === 100 ? (
+                                      <Check className="h-5 w-5 text-green-600" />
+                                    ) : (
+                                      <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    )
+                                  ) : item.uploadError ? (
+                                    <X className="h-5 w-5 text-destructive" />
+                                  ) : (
+                                    <Package className="h-5 w-5 text-muted-foreground" />
+                                  )}
+                                  <div className="flex-1">
+                                    <div className="font-medium">{item.fileName}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {item.uploadError ? (
+                                        <span className="text-destructive">{item.uploadError}</span>
+                                      ) : item.uploadProgress === 100 ? (
+                                        <span className="text-green-600">✓ Uploaded successfully</span>
+                                      ) : item.uploadProgress ? (
+                                        <span>Uploading...</span>
+                                      ) : (
+                                        formatFileSize(item.fileSize)
+                                      )}
+                                    </div>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs">Gallery</Badge>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeGalleryItem(item.id)}
+                                  disabled={item.uploadProgress !== undefined && item.uploadProgress > 0 && item.uploadProgress < 100}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/supabase/auth';
+import { generateDownloadUrl } from '@/lib/storage';
 
 export async function GET(
   request: NextRequest,
@@ -78,6 +79,18 @@ export async function GET(
     });
 
     // Transform data
+    const mediaWithUrls = await Promise.all(
+      product.media.map(async (media) => {
+        try {
+          const url = await generateDownloadUrl(media.storageKey, 3600, 'PREVIEW');
+          return { ...media, url };
+        } catch (err) {
+          console.warn('Failed to generate media URL:', err);
+          return { ...media, url: null };
+        }
+      })
+    );
+
     const transformedProduct = {
       id: product.id,
       slug: product.slug,
@@ -94,7 +107,7 @@ export async function GET(
       licenseType: product.licenseType,
       seatCount: product.seatCount,
       creator: product.creator,
-      media: product.media,
+      media: mediaWithUrls,
       versions: product.versions,
       files: product.files.map((file) => ({
         id: file.id,

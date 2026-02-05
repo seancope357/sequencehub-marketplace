@@ -43,6 +43,8 @@ interface Product {
   media: {
     storageKey: string;
     mediaType: string;
+    mimeType?: string | null;
+    url?: string | null;
   }[];
   versions: {
     id: string;
@@ -194,21 +196,80 @@ export default function ProductPage() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left: Images */}
+          {/* Left: Media */}
           <div className="space-y-4">
-            <Card>
-              <CardContent className="p-0">
-                <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Package className="h-24 w-24 text-muted-foreground" />
-                  </div>
+            {product.media.length === 0 ? (
+              <>
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Package className="h-24 w-24 text-muted-foreground" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="text-sm text-muted-foreground">
+                  No preview images available.
                 </div>
-              </CardContent>
-            </Card>
+              </>
+            ) : (
+              <>
+                {(() => {
+                  const cover = product.media.find((item) => item.mediaType === 'cover') || product.media[0];
+                  if (!cover?.url) {
+                    return (
+                      <Card>
+                        <CardContent className="p-0">
+                          <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg" />
+                        </CardContent>
+                      </Card>
+                    );
+                  }
 
-            <div className="text-sm text-muted-foreground">
-              No preview images available.
-            </div>
+                  const isVideo = cover.mimeType?.startsWith('video/');
+
+                  return (
+                    <Card>
+                      <CardContent className="p-0">
+                        <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
+                          {isVideo ? (
+                            <video
+                              src={cover.url}
+                              className="h-full w-full object-cover"
+                              controls
+                            />
+                          ) : (
+                            <img
+                              src={cover.url}
+                              alt={product.title}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                <div className="grid grid-cols-4 gap-2">
+                  {product.media
+                    .filter((item) => item.mediaType !== 'cover')
+                    .slice(0, 8)
+                    .map((item) => (
+                      <div key={item.storageKey} className="aspect-square rounded border overflow-hidden bg-muted">
+                        {item.url ? (
+                          item.mimeType?.startsWith('video/') ? (
+                            <video src={item.url} className="h-full w-full object-cover" />
+                          ) : (
+                            <img src={item.url} alt={product.title} className="h-full w-full object-cover" />
+                          )
+                        ) : null}
+                      </div>
+                    ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Right: Product Info */}

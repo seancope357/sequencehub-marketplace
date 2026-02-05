@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
       seatCount,
       status = 'DRAFT',
       files = [],
+      media = [],
     } = body;
 
     // Validation
@@ -167,6 +168,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate media payload (if present)
+    if (Array.isArray(media) && media.length > 0) {
+      for (const item of media) {
+        if (!item?.fileName || !item?.fileSize || !item?.storageKey || !item?.fileHash) {
+          return NextResponse.json(
+            { error: 'Each media item must include fileName, fileSize, storageKey, and fileHash' },
+            { status: 400 }
+          );
+        }
+
+        if (!item?.mediaType || !['cover', 'gallery', 'preview'].includes(item.mediaType)) {
+          return NextResponse.json(
+            { error: 'Each media item must include a valid mediaType (cover, gallery, preview)' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     // Create product
     const product = await db.product.create({
       data: {
@@ -191,6 +211,23 @@ export async function POST(request: NextRequest) {
             isActive: true,
           },
         },
+        media: media.length
+          ? {
+              create: media.map((item: any, index: number) => ({
+                mediaType: item.mediaType,
+                fileName: item.fileName,
+                originalName: item.originalName || item.fileName,
+                fileSize: item.fileSize,
+                fileHash: item.fileHash,
+                storageKey: item.storageKey,
+                mimeType: item.mimeType || getMimeType(item.fileName),
+                width: item.width || null,
+                height: item.height || null,
+                altText: item.altText || null,
+                displayOrder: item.displayOrder ?? index,
+              })),
+            }
+          : undefined,
         versions: {
           create: {
             versionNumber: 1,
@@ -265,10 +302,12 @@ function getMimeType(fileName: string): string {
     xml: 'application/xml',
     mp4: 'video/mp4',
     mov: 'video/quicktime',
+    webm: 'video/webm',
     gif: 'image/gif',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
+    webp: 'image/webp',
   };
   return mimeTypes[ext || ''] || 'application/octet-stream';
 }
