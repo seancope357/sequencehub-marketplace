@@ -20,7 +20,7 @@ export function AppHeader({
   browseHref = '/browse',
 }: AppHeaderProps) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, isCreatorOrAdmin, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, isCreatorOrAdmin, isAdmin, logout } = useAuth();
 
   const showDashboardMenu = !isLoading && isAuthenticated;
 
@@ -56,6 +56,7 @@ export function AppHeader({
                 <DashboardMenu
                   user={user}
                   isCreatorOrAdmin={isCreatorOrAdmin}
+                  isAdmin={isAdmin}
                   onLogout={handleLogout}
                 />
               </>

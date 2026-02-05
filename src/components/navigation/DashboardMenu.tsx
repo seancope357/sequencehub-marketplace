@@ -10,6 +10,7 @@ import {
   ShoppingBag,
   Upload,
   LogOut,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,10 +26,11 @@ import type { AuthUser } from '@/lib/auth-types';
 interface DashboardMenuProps {
   user: AuthUser | null;
   isCreatorOrAdmin: boolean;
+  isAdmin: boolean;
   onLogout: () => Promise<void> | void;
 }
 
-export function DashboardMenu({ user, isCreatorOrAdmin, onLogout }: DashboardMenuProps) {
+export function DashboardMenu({ user, isCreatorOrAdmin, isAdmin, onLogout }: DashboardMenuProps) {
   const router = useRouter();
 
   const displayName = user?.profile?.displayName
@@ -56,6 +58,12 @@ export function DashboardMenu({ user, isCreatorOrAdmin, onLogout }: DashboardMen
           <BarChart3 className="h-4 w-4" />
           Overview
         </DropdownMenuItem>
+        {isAdmin ? (
+          <DropdownMenuItem onSelect={() => router.push('/admin')}>
+            <Shield className="h-4 w-4" />
+            Admin Panel
+          </DropdownMenuItem>
+        ) : null}
         {isCreatorOrAdmin ? (
           <DropdownMenuItem onSelect={() => router.push('/dashboard/products')}>
             <Package className="h-4 w-4" />
