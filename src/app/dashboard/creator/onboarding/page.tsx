@@ -150,213 +150,216 @@ function CreatorOnboardingContent() {
           </p>
         </div>
 
-      {status?.stripeConfigured === false && (
-        <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">
-          <AlertTitle>Stripe Connect Not Configured</AlertTitle>
-          <AlertDescription className="mt-2">
-            {status.message || 'Stripe Connect is not configured for this environment yet.'}
-            <div className="mt-2 text-sm">
-              Set `STRIPE_SECRET_KEY` (and `NEXT_PUBLIC_BASE_URL`) in your environment,
-              then refresh this page.
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {status?.stripeError && (
-        <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">
-          <AlertTitle>Stripe Status Unavailable</AlertTitle>
-          <AlertDescription className="mt-2">
-            {status.stripeError}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <XCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {successMessage && (
-        <Alert className="mb-6 border-green-500 bg-green-50 text-green-900">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <AlertTitle>Success</AlertTitle>
-          <AlertDescription>{successMessage}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="space-y-6">
-        {/* Current Status Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Account Status</CardTitle>
-            <CardDescription>
-              Current state of your Stripe Connect integration
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Account Exists */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Stripe Account Created</span>
-                {status?.hasAccount ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-gray-400" />
-                )}
+        {status?.stripeConfigured === false && (
+          <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">
+            <AlertTitle>Stripe Connect Not Configured</AlertTitle>
+            <AlertDescription className="mt-2">
+              {status.message || 'Stripe Connect is not configured for this environment yet.'}
+              <div className="mt-2 text-sm">
+                Set `STRIPE_SECRET_KEY` (and `NEXT_PUBLIC_BASE_URL`) in your environment,
+                then refresh this page.
               </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {status?.stripeError && (
+          <Alert className="mb-6 border-amber-500 bg-amber-50 text-amber-900">
+            <AlertTitle>Stripe Status Unavailable</AlertTitle>
+            <AlertDescription className="mt-2">
+              {status.stripeError}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <XCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {successMessage && (
+          <Alert className="mb-6 border-green-500 bg-green-50 text-green-900">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertTitle>Success</AlertTitle>
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-6">
+          {/* Current Status Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Status</CardTitle>
+              <CardDescription>
+                Current state of your Stripe Connect integration
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Account Exists */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Stripe Account Created</span>
+                  {status?.hasAccount ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-gray-400" />
+                  )}
+                </div>
 
               {/* Details Submitted */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Details Submitted</span>
-                {status?.detailsSubmitted ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-gray-400" />
-                )}
-              </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Details Submitted</span>
+                  {status?.detailsSubmitted ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-gray-400" />
+                  )}
+                </div>
 
               {/* Capabilities Active */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Payment Capabilities Active</span>
-                {status?.capabilitiesActive ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-gray-400" />
-                )}
-              </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Payment Capabilities Active</span>
+                  {status?.capabilitiesActive ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-gray-400" />
+                  )}
+                </div>
 
               {/* Charges Enabled */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Ready to Accept Payments</span>
-                {status?.canReceivePayments ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <XCircle className="h-5 w-5 text-gray-400" />
-                )}
-              </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Ready to Accept Payments</span>
+                  {status?.canReceivePayments ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-gray-400" />
+                  )}
+                </div>
 
               {/* Overall Status */}
-              <div className="pt-4 border-t">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">Overall Status</span>
-                  <span className={`text-sm font-semibold ${
-                    status?.isComplete ? 'text-green-600' : 'text-amber-600'
-                  }`}>
-                    {status?.onboardingStatus || 'PENDING'}
-                  </span>
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">Overall Status</span>
+                    <span
+                      className={`text-sm font-semibold ${
+                        status?.isComplete ? 'text-green-600' : 'text-amber-600'
+                      }`}
+                    >
+                      {status?.onboardingStatus || 'PENDING'}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
         {/* Action Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Next Steps</CardTitle>
-            <CardDescription>
-              {status?.isComplete
-                ? 'Your account is ready to receive payments'
-                : 'Complete your Stripe onboarding to start selling'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!status?.isComplete ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  You need to complete the Stripe onboarding process before you can receive
-                  payments. This includes verifying your identity and providing bank account
-                  information for payouts.
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleStartOnboarding}
-                    disabled={actionLoading || status?.stripeConfigured === false}
-                    className="flex-1"
-                  >
-                    {actionLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        {status?.hasAccount ? 'Continue Setup' : 'Connect with Stripe'}
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefresh}
-                    disabled={actionLoading}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Your Stripe account is fully connected. You can manage your payouts,
-                  view transactions, and update your account settings in the Stripe Dashboard.
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleOpenDashboard}
-                    disabled={actionLoading}
-                    className="flex-1"
-                  >
-                    {actionLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Open Stripe Dashboard
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleRefresh}
-                    disabled={actionLoading}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Next Steps</CardTitle>
+              <CardDescription>
+                {status?.isComplete
+                  ? 'Your account is ready to receive payments'
+                  : 'Complete your Stripe onboarding to start selling'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!status?.isComplete ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    You need to complete the Stripe onboarding process before you can receive
+                    payments. This includes verifying your identity and providing bank account
+                    information for payouts.
+                  </p>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleStartOnboarding}
+                      disabled={actionLoading || status?.stripeConfigured === false}
+                      className="flex-1"
+                    >
+                      {actionLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          {status?.hasAccount ? 'Continue Setup' : 'Connect with Stripe'}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleRefresh}
+                      disabled={actionLoading}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Your Stripe account is fully connected. You can manage your payouts,
+                    view transactions, and update your account settings in the Stripe Dashboard.
+                  </p>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleOpenDashboard}
+                      disabled={actionLoading}
+                      className="flex-1"
+                    >
+                      {actionLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open Stripe Dashboard
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleRefresh}
+                      disabled={actionLoading}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
         {/* Information Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle>About Stripe Connect</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              SequenceHUB uses Stripe Connect to process payments. This allows you to:
-            </p>
-            <ul className="list-disc list-inside space-y-2 ml-2">
-              <li>Receive payments directly to your bank account</li>
-              <li>Manage your own payout schedule</li>
-              <li>Track all transactions in your Stripe Dashboard</li>
-              <li>Get detailed financial reports and tax documents</li>
-            </ul>
-            <p className="pt-2">
-              Platform fee: <span className="font-semibold">10%</span> of each sale
-              (automatically deducted from payments)
-            </p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>About Stripe Connect</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                SequenceHUB uses Stripe Connect to process payments. This allows you to:
+              </p>
+              <ul className="list-disc list-inside space-y-2 ml-2">
+                <li>Receive payments directly to your bank account</li>
+                <li>Manage your own payout schedule</li>
+                <li>Track all transactions in your Stripe Dashboard</li>
+                <li>Get detailed financial reports and tax documents</li>
+              </ul>
+              <p className="pt-2">
+                Platform fee: <span className="font-semibold">10%</span> of each sale
+                (automatically deducted from payments)
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
