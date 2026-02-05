@@ -3,6 +3,7 @@ import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
 import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
+import { generateDownloadUrl } from '@/lib/storage';
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,24 +32,44 @@ export async function GET(request: NextRequest) {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        media: {
+          orderBy: { displayOrder: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     // Transform data
-    const transformedProducts = products.map((product) => ({
-      id: product.id,
-      slug: product.slug,
-      title: product.title,
-      category: product.category,
-      status: product.status,
-      price: product.prices[0]?.amount || 0,
-      includesFSEQ: product.includesFSEQ,
-      includesSource: product.includesSource,
-      saleCount: product.saleCount,
-      viewCount: product.viewCount,
-      createdAt: product.createdAt.toISOString(),
-    }));
+    const transformedProducts = await Promise.all(
+      products.map(async (product) => {
+        const mediaWithUrls = await Promise.all(
+          product.media.map(async (item) => {
+            try {
+              const url = await generateDownloadUrl(item.storageKey, 3600, 'PREVIEW');
+              return { ...item, url };
+            } catch (err) {
+              console.warn('Failed to generate media URL:', err);
+              return { ...item, url: null };
+            }
+          })
+        );
+
+        return {
+          id: product.id,
+          slug: product.slug,
+          title: product.title,
+          category: product.category,
+          status: product.status,
+          price: product.prices[0]?.amount || 0,
+          includesFSEQ: product.includesFSEQ,
+          includesSource: product.includesSource,
+          saleCount: product.saleCount,
+          viewCount: product.viewCount,
+          createdAt: product.createdAt.toISOString(),
+          media: mediaWithUrls,
+        };
+      })
+    );
 
     return NextResponse.json(
       { products: transformedProducts },

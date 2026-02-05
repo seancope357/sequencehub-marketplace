@@ -53,6 +53,13 @@ interface Product {
   saleCount: number;
   viewCount: number;
   createdAt: string;
+  media: {
+    id: string;
+    storageKey: string;
+    mediaType: string;
+    mimeType?: string | null;
+    url?: string | null;
+  }[];
 }
 
 export default function DashboardProducts() {
@@ -194,6 +201,32 @@ export default function DashboardProducts() {
                       <TableRow key={product.id}>
                         <TableCell className="font-medium">
                           <div>
+                            {product.media?.length ? (
+                              <div className="mb-2 grid grid-cols-4 gap-1">
+                                {product.media.slice(0, 4).map((item) => (
+                                  <div
+                                    key={item.id || item.storageKey}
+                                    className="h-12 w-12 overflow-hidden rounded border bg-muted"
+                                  >
+                                    {item.url ? (
+                                      item.mimeType?.startsWith('video/') ? (
+                                        <video
+                                          src={item.url}
+                                          className="h-full w-full object-cover"
+                                          muted
+                                        />
+                                      ) : (
+                                        <img
+                                          src={item.url}
+                                          alt={product.title}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      )
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                             <div className="flex items-center gap-2">
                               {product.includesFSEQ && (
                                 <Badge variant="outline" className="text-xs">

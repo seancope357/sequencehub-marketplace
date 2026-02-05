@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
+import { deleteFile } from '@/lib/storage';
 import { createAuditLog } from '@/lib/supabase/auth';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
@@ -59,10 +60,38 @@ export async function DELETE(
       );
     }
 
+    // Fetch storage keys to clean up before delete
+    const productMedia = await db.productMedia.findMany({
+      where: { productId: id },
+      select: { storageKey: true },
+    });
+
+    const productFiles = await db.productFile.findMany({
+      where: { version: { productId: id } },
+      select: { storageKey: true, fileType: true },
+    });
+
     // Delete product (cascade will handle related records)
     await db.product.delete({
       where: { id },
     });
+
+    // Clean up storage objects (best effort)
+    for (const media of productMedia) {
+      try {
+        await deleteFile(media.storageKey, 'PREVIEW');
+      } catch (cleanupError) {
+        console.warn('Failed to delete media file:', cleanupError);
+      }
+    }
+
+    for (const file of productFiles) {
+      try {
+        await deleteFile(file.storageKey, file.fileType);
+      } catch (cleanupError) {
+        console.warn('Failed to delete product file:', cleanupError);
+      }
+    }
 
     // Create audit log
     await createAuditLog({
