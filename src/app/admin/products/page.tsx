@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { db } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -72,10 +73,18 @@ export default async function AdminProductsPage() {
                     </TableCell>
                     <TableCell>{new Date(product.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      <AdminProductStatusActions
-                        productId={product.id}
-                        status={product.status}
-                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/admin/products/${product.id}/media`}
+                          className="text-sm text-primary underline underline-offset-4"
+                        >
+                          Media
+                        </Link>
+                        <AdminProductStatusActions
+                          productId={product.id}
+                          status={product.status}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
