@@ -39,18 +39,19 @@ interface Purchase {
 }
 
 export default function Library() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (isLoading) return;
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
     loadPurchases();
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, isLoading, router]);
 
   const loadPurchases = async () => {
     try {

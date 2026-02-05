@@ -4,11 +4,11 @@ import type { RoleName } from '@/lib/auth-types';
 import { hasRole, isAdmin, isCreator, isCreatorOrAdmin } from '@/lib/auth-utils';
 
 export function useAuth() {
-  const { user, isLoading, setUser, logout, refreshUser } = useAuthStore();
+  const { user, isLoading, setUser, logout, initialize, refreshUser } = useAuthStore();
 
   useEffect(() => {
-    refreshUser();
-  }, [refreshUser]);
+    initialize();
+  }, [initialize]);
 
   return {
     user,

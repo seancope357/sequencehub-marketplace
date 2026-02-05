@@ -87,7 +87,7 @@ const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB (must match server)
 
 export default function NewProductPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -123,12 +123,13 @@ export default function NewProductPage() {
   const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
     checkStripeStatus();
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, authLoading, router]);
 
   const checkStripeStatus = async () => {
     try {

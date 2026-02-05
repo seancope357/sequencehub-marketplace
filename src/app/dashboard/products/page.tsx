@@ -56,7 +56,7 @@ interface Product {
 }
 
 export default function DashboardProducts() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,12 +66,13 @@ export default function DashboardProducts() {
   });
 
   useEffect(() => {
+    if (isLoading) return;
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
     loadProducts();
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, isLoading, router]);
 
   const loadProducts = async () => {
     try {
