@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
-import { getAccountStatus, getStripeConfigStatus, StripeConfigError } from '@/lib/stripe-connect';
+import { getAccountStatus, getStripeConfigStatus, StripeConfigError, updateCreatorAccountStatus } from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
@@ -85,11 +85,24 @@ export async function GET(request: NextRequest) {
     // 4. Check current status with Stripe
     try {
       const {
+        account,
         isComplete,
         chargesEnabled,
         detailsSubmitted,
         capabilitiesActive,
       } = await getAccountStatus(creatorAccount.stripeAccountId);
+
+      const derivedStatus = isComplete
+        ? 'COMPLETED'
+        : detailsSubmitted
+        ? 'IN_PROGRESS'
+        : 'PENDING';
+
+      try {
+        await updateCreatorAccountStatus(creatorAccount.stripeAccountId, account);
+      } catch (updateError) {
+        console.warn('Failed to sync Stripe account status:', updateError);
+      }
 
       // 5. Return comprehensive status
       return NextResponse.json(
@@ -98,7 +111,7 @@ export async function GET(request: NextRequest) {
           stripeConfigured: true,
           hasAccount: true,
           stripeAccountId: creatorAccount.stripeAccountId,
-          onboardingStatus: creatorAccount.onboardingStatus,
+          onboardingStatus: derivedStatus,
           isComplete,
           chargesEnabled,
           detailsSubmitted,

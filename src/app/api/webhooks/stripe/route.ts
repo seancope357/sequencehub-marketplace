@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { db } from '@/lib/db';
 import { createAuditLog } from '@/lib/supabase/auth';
 import { sendPurchaseConfirmation, sendSaleNotification } from '@/lib/email/send';
+import { updateCreatorAccountStatus } from '@/lib/stripe-connect';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-12-18.acacia',
@@ -378,15 +379,7 @@ async function handleAccountUpdated(account: Stripe.Account) {
     ? 'IN_PROGRESS'
     : 'PENDING';
 
-  // Update creator account
-  await db.creatorAccount.update({
-    where: { stripeAccountId: account.id },
-    data: {
-      stripeAccountStatus: account.charges_enabled ? 'active' : 'pending',
-      onboardingStatus,
-      updatedAt: new Date(),
-    },
-  });
+  await updateCreatorAccountStatus(account.id, account);
 
   // Create audit log
   await createAuditLog({
