@@ -1,6 +1,4 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Package, Upload, Shield, ArrowRight, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,8 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { AppHeader } from '@/components/navigation/AppHeader';
 
 export default function HomePage() {
-  const router = useRouter();
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-secondary/20">
       <AppHeader />
@@ -29,21 +25,25 @@ export default function HomePage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
                 size="lg"
-                onClick={() => router.push('/auth/register')}
                 className="w-full sm:w-auto text-lg h-14 px-8 gap-2"
+                asChild
               >
-                <Upload className="h-5 w-5" />
-                Start Selling
-                <ArrowRight className="h-5 w-5" />
+                <Link href="/auth/register">
+                  <Upload className="h-5 w-5" />
+                  Start Selling
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
               </Button>
               <Button
                 size="lg"
                 variant="outline"
-                onClick={() => router.push('/browse')}
                 className="w-full sm:w-auto text-lg h-14 px-8 gap-2"
+                asChild
               >
-                <Search className="h-5 w-5" />
-                Browse Listings
+                <Link href="/browse">
+                  <Search className="h-5 w-5" />
+                  Browse Listings
+                </Link>
               </Button>
             </div>
           </div>
@@ -96,24 +96,24 @@ export default function HomePage() {
         <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
           <p className="mb-2">SequenceHUB • Built for the xLights Community</p>
           <div className="flex items-center justify-center gap-4">
-            <button
+            <Link
+              href="/legal/terms"
               className="hover:text-foreground underline underline-offset-4"
-              onClick={() => router.push('/legal/terms')}
             >
               Terms
-            </button>
-            <button
+            </Link>
+            <Link
+              href="/legal/privacy"
               className="hover:text-foreground underline underline-offset-4"
-              onClick={() => router.push('/legal/privacy')}
             >
               Privacy
-            </button>
-            <button
+            </Link>
+            <Link
+              href="/legal/refunds"
               className="hover:text-foreground underline underline-offset-4"
-              onClick={() => router.push('/legal/refunds')}
             >
               Refunds
-            </button>
+            </Link>
           </div>
         </div>
       </footer>

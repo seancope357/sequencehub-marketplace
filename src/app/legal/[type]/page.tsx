@@ -3,6 +3,7 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { db } from '@/lib/db';
 import { LegalDocumentType } from '@prisma/client';
+import type { Metadata } from 'next';
 
 function mapSlugToType(slug: string): LegalDocumentType | null {
   switch (slug) {
@@ -28,6 +29,17 @@ function slugLabel(slug: string): string {
     default:
       return 'Legal';
   }
+}
+
+export async function generateMetadata({ params }: { params: { type: string } }): Promise<Metadata> {
+  const label = slugLabel(params.type);
+  return {
+    title: `${label} | SequenceHUB`,
+    description: `${label} for SequenceHUB.`,
+    alternates: {
+      canonical: `/legal/${params.type}`,
+    },
+  };
 }
 
 export default async function LegalPage({ params }: { params: { type: string } }) {
