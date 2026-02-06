@@ -9,7 +9,10 @@ import { Resend } from 'resend';
 // CONFIGURATION VALIDATION
 // ============================================
 
-if (!process.env.RESEND_API_KEY) {
+const emailFeatureEnabled = process.env.EMAIL_ENABLED !== 'false';
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (emailFeatureEnabled && !process.env.RESEND_API_KEY && !isProduction) {
   console.warn(
     '⚠️  RESEND_API_KEY not configured. Email functionality will be disabled.\n' +
     '   To enable emails:\n' +
@@ -36,7 +39,7 @@ export const EMAIL_CONFIG = {
   replyTo: process.env.RESEND_REPLY_TO || 'support@sequencehub.com',
 
   // Feature flag - disable emails in development if needed
-  enabled: process.env.EMAIL_ENABLED !== 'false' && !!process.env.RESEND_API_KEY,
+  enabled: emailFeatureEnabled && !!process.env.RESEND_API_KEY,
 
   // Delay between emails (rate limiting)
   sendDelay: parseInt(process.env.EMAIL_SEND_DELAY_MS || '0', 10),
