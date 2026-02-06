@@ -587,8 +587,8 @@ export default function NewProductPage() {
 
   const handleSave = async (publish: boolean = false) => {
     // Check Stripe account first
-    if (!stripeStatus?.canReceivePayments) {
-      toast.error('Please connect your Stripe account before creating products');
+    if (publish && !stripeStatus?.canReceivePayments) {
+      toast.error('Please connect your Stripe account before publishing products');
       return;
     }
 
@@ -960,7 +960,7 @@ export default function NewProductPage() {
                     <Button
                       variant="outline"
                       onClick={() => handleSave(false)}
-                      disabled={isSaving || !stripeStatus?.canReceivePayments}
+                      disabled={isSaving}
                     >
                       <Save className="h-4 w-4 mr-2" />
                       {isSaving ? 'Saving...' : 'Save Draft'}

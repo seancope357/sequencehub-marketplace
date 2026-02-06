@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { db } from '@/lib/db';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -27,7 +28,7 @@ export default async function AdminUsersPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Users</h1>
-        <p className="text-muted-foreground">Latest 50 users. Use filters in future iterations.</p>
+        <p className="text-muted-foreground">Latest 50 users in the system.</p>
       </div>
 
       <Card>
@@ -60,11 +61,19 @@ export default async function AdminUsersPage() {
                     </TableCell>
                     <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      <AdminUserRoleActions
-                        userId={user.id}
-                        roles={user.roles.map((role) => role.role)}
-                        isSelf={currentUser?.id === user.id}
-                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          className="text-sm text-primary underline underline-offset-4"
+                        >
+                          View
+                        </Link>
+                        <AdminUserRoleActions
+                          userId={user.id}
+                          roles={user.roles.map((role) => role.role)}
+                          isSelf={currentUser?.id === user.id}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
-import { isCreatorOrAdmin } from '@/lib/auth-utils';
+import { isCreatorOrAdmin, isAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import { generateDownloadUrl } from '@/lib/storage';
+import { getStripeConfigStatus } from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
@@ -160,6 +161,30 @@ export async function POST(request: NextRequest) {
         { error: 'Price is required' },
         { status: 400 }
       );
+    }
+
+    const wantsPublish = status === 'PUBLISHED';
+
+    if (wantsPublish && !isAdmin(user)) {
+      const stripeConfig = getStripeConfigStatus();
+      if (!stripeConfig.configured) {
+        return NextResponse.json(
+          { error: stripeConfig.message || 'Stripe Connect is not configured.' },
+          { status: 409 }
+        );
+      }
+
+      const creatorAccount = await db.creatorAccount.findUnique({
+        where: { userId: user.id },
+        select: { stripeAccountId: true, onboardingStatus: true },
+      });
+
+      if (!creatorAccount?.stripeAccountId || creatorAccount.onboardingStatus !== 'COMPLETED') {
+        return NextResponse.json(
+          { error: 'Stripe Connect onboarding is required before publishing products.' },
+          { status: 409 }
+        );
+      }
     }
 
     // Generate slug from title

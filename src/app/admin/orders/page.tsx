@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -52,6 +53,7 @@ export default async function AdminOrdersPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -67,6 +69,14 @@ export default async function AdminOrdersPage() {
                     <TableCell>{order.status}</TableCell>
                     <TableCell>{formatCurrency(order.totalAmount)}</TableCell>
                     <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Link
+                        href={`/admin/orders/${order.id}`}
+                        className="text-sm text-primary underline underline-offset-4"
+                      >
+                        View
+                      </Link>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

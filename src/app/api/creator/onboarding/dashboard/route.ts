@@ -6,7 +6,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
 import { db } from '@/lib/db';
-import { createExpressDashboardLink, getStripeConfigStatus } from '@/lib/stripe-connect';
+import {
+  createExpressDashboardLink,
+  getAccountStatus,
+  getStripeConfigStatus,
+  updateCreatorAccountStatus,
+} from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,12 +44,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 3. Check if onboarding is complete
+    // 3. If onboarding is not marked complete, verify with Stripe before blocking.
     if (creatorAccount.onboardingStatus !== 'COMPLETED') {
-      return NextResponse.json(
-        { error: 'Onboarding not complete - finish setup first' },
-        { status: 400 }
-      );
+      try {
+        const { account, isComplete } = await getAccountStatus(creatorAccount.stripeAccountId);
+        if (!isComplete) {
+          return NextResponse.json(
+            { error: 'Onboarding not complete - finish setup first' },
+            { status: 400 }
+          );
+        }
+        await updateCreatorAccountStatus(creatorAccount.stripeAccountId, account);
+      } catch (stripeError) {
+        console.warn('Failed to verify Stripe onboarding status:', stripeError);
+        return NextResponse.json(
+          { error: 'Unable to verify Stripe account status. Please try again.' },
+          { status: 503 }
+        );
+      }
     }
 
     // 4. Generate Express Dashboard link
