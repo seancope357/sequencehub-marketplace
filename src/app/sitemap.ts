@@ -1,6 +1,10 @@
 import { MetadataRoute } from 'next';
 import { absoluteUrl } from '@/lib/seo';
 
+// Avoid build-time DB coupling in environments where DB access may be unavailable.
+export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     {
@@ -30,9 +34,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  // In some build environments (e.g., Vercel previews), DATABASE_URL can be absent.
-  // Return static routes instead of triggering Prisma initialization errors.
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  // Return static routes when DB configuration is unavailable or obviously placeholder.
+  if (
+    !databaseUrl ||
+    databaseUrl.includes('YOUR-PASSWORD') ||
+    databaseUrl.includes('your_password')
+  ) {
     return staticRoutes;
   }
 
@@ -52,7 +61,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     return [...staticRoutes, ...productRoutes];
   } catch (error) {
-    console.error('Failed to generate sitemap:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Failed to generate sitemap:', error);
+    }
     return staticRoutes;
   }
 }
