@@ -1,6 +1,4 @@
 import { MetadataRoute } from 'next';
-import { db } from '@/lib/db';
-import { ProductStatus } from '@prisma/client';
 import { absoluteUrl } from '@/lib/seo';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -32,9 +30,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
+  // In some build environments (e.g., Vercel previews), DATABASE_URL can be absent.
+  // Return static routes instead of triggering Prisma initialization errors.
+  if (!process.env.DATABASE_URL) {
+    return staticRoutes;
+  }
+
   try {
+    const { db } = await import('@/lib/db');
     const products = await db.product.findMany({
-      where: { status: ProductStatus.PUBLISHED },
+      where: { status: 'PUBLISHED' },
       select: { slug: true, updatedAt: true },
     });
 
