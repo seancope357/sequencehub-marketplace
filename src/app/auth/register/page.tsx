@@ -93,16 +93,18 @@ export default function RegisterPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} autoComplete="on" className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Name (Optional)</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     id="name"
+                    name="name"
                     type="text"
                     placeholder="Your name"
                     className="pl-10"
+                    autoComplete="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
@@ -115,9 +117,13 @@ export default function RegisterPage() {
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     id="email"
+                    name="email"
                     type="email"
                     placeholder="you@example.com"
                     className="pl-10"
+                    autoComplete="username"
+                    inputMode="email"
+                    autoCapitalize="none"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -131,9 +137,11 @@ export default function RegisterPage() {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     id="password"
+                    name="password"
                     type="password"
                     placeholder="Min. 8 characters"
                     className="pl-10"
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -147,9 +155,11 @@ export default function RegisterPage() {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     id="confirmPassword"
+                    name="confirmPassword"
                     type="password"
                     placeholder="Re-enter password"
                     className="pl-10"
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
