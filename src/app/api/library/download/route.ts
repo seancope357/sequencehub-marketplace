@@ -4,12 +4,19 @@ import { db } from '@/lib/db';
 import { createAuditLog } from '@/lib/supabase/auth';
 import crypto from 'crypto';
 
-// In production, this should be in environment variables
-const DOWNLOAD_SECRET = process.env.DOWNLOAD_SECRET || 'your-download-secret-key';
 const DOWNLOAD_TTL = 60 * 5; // 5 minutes in seconds
+
+function getDownloadSecret(): string {
+  const secret = process.env.DOWNLOAD_SECRET;
+  if (!secret) {
+    throw new Error('DOWNLOAD_SECRET is required');
+  }
+  return secret;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const downloadSecret = getDownloadSecret();
     const user = await getCurrentUser();
 
     if (!user) {
@@ -91,22 +98,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate signed URL for each file
-    const downloadUrls = version.files.map((file) => {
-      const expires = Math.floor(Date.now() / 1000) + DOWNLOAD_TTL;
-      const data = `${file.storageKey}:${expires}:${user.id}`;
-      const signature = crypto
-        .createHmac('sha256', DOWNLOAD_SECRET)
-        .update(data)
-        .digest('hex');
+    const tokenIssuedAt = Date.now();
+    const expiresAt = new Date(tokenIssuedAt + DOWNLOAD_TTL * 1000);
+    const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined;
+    const userAgent = request.headers.get('user-agent') || undefined;
 
-      return {
-        fileName: file.fileName,
-        fileSize: file.fileSize,
-        fileType: file.fileType,
-        downloadUrl: `/api/media/${file.storageKey}?expires=${expires}&signature=${signature}&userId=${user.id}`,
-      };
-    });
+    // Generate one-time token per file and persist for replay protection.
+    const downloadUrls = await Promise.all(
+      version.files.map(async (file) => {
+        const token = crypto
+          .createHmac('sha256', downloadSecret)
+          .update(`${user.id}:${entitlement.id}:${file.id}:${tokenIssuedAt}:${crypto.randomBytes(16).toString('hex')}`)
+          .digest('hex');
+
+        await db.downloadToken.create({
+          data: {
+            userId: user.id,
+            entitlementId: entitlement.id,
+            fileId: file.id,
+            token,
+            expiresAt,
+            ipAddress,
+            userAgent,
+          },
+        });
+
+        return {
+          fileName: file.fileName,
+          fileSize: file.fileSize,
+          fileType: file.fileType,
+          downloadUrl: `/api/media/${file.storageKey}?token=${encodeURIComponent(token)}`,
+        };
+      })
+    );
 
     // Update download count and last download time
     await db.entitlement.update({
@@ -137,7 +161,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error generating download:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to generate download links' },
       { status: 500 }
     );
   }

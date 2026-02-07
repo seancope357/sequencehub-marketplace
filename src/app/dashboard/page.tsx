@@ -2,12 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, ShoppingBag, DollarSign, BarChart3, Plus, CreditCard, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  Package,
+  ShoppingBag,
+  DollarSign,
+  BarChart3,
+  Plus,
+  CreditCard,
+  CheckCircle2,
+  AlertCircle,
+  ListOrdered,
+  CircleHelp,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { AppHeader } from '@/components/navigation/AppHeader';
+import { SellerSidebarNav } from '@/components/dashboard/seller/SellerSidebarNav';
 
 interface DashboardStats {
   totalProducts: number;
@@ -114,6 +125,10 @@ export default function Dashboard() {
       <AppHeader contextLabel="Dashboard" browseLabel="Marketplace" browseHref="/" />
 
       <div className="container mx-auto px-4 py-8">
+        <div className="mb-6">
+          <SellerSidebarNav />
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold">
@@ -240,43 +255,24 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Dashboard Tabs */}
-        <Tabs defaultValue="products" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="products" onClick={() => router.push('/dashboard/products')}>
-              Products
-            </TabsTrigger>
-            <TabsTrigger value="settings" onClick={() => router.push('/dashboard/settings')}>
-              Settings
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="products" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Products</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  View all your products in the Products tab
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="settings" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Account Settings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  Manage your account settings in the Settings tab
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Button variant="outline" className="justify-start" onClick={() => router.push('/dashboard/products')}>
+            <Package className="h-4 w-4 mr-2" />
+            Manage Listings
+          </Button>
+          <Button variant="outline" className="justify-start" onClick={() => router.push('/dashboard/orders')}>
+            <ListOrdered className="h-4 w-4 mr-2" />
+            View Orders
+          </Button>
+          <Button variant="outline" className="justify-start" onClick={() => router.push('/dashboard/payouts')}>
+            <CreditCard className="h-4 w-4 mr-2" />
+            View Payouts
+          </Button>
+          <Button variant="outline" className="justify-start" onClick={() => router.push('/dashboard/support')}>
+            <CircleHelp className="h-4 w-4 mr-2" />
+            Contact Support
+          </Button>
+        </div>
       </div>
     </div>
   );

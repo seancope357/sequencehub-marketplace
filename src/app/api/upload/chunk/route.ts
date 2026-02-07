@@ -10,6 +10,7 @@ import { getUploadSession, updateUploadSession, storeChunk } from '@/lib/upload/
 import { validateChunkHash } from '@/lib/upload/validation';
 import { ChunkUploadResponse } from '@/lib/upload/types';
 import { AuditAction } from '@prisma/client';
+import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,16 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const limitResult = await applyRateLimit(request, {
+      config: RATE_LIMIT_CONFIGS.UPLOAD_FILE,
+      byUser: true,
+      byIp: false,
+      message: 'Chunk upload rate limit exceeded. Please try again later.',
+    });
+    if (!limitResult.allowed) {
+      return limitResult.response;
     }
 
     // Parse form data

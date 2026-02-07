@@ -92,7 +92,7 @@ describe('POST /api/dashboard/products', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(401);
-    expect(payload.error).toBe('Unauthorized');
+    expect(payload.error.message).toBe('Unauthorized');
   });
 
   it('blocks publish when Stripe is not configured', async () => {
@@ -107,7 +107,7 @@ describe('POST /api/dashboard/products', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(409);
-    expect(payload.error).toBe('Stripe is missing');
+    expect(payload.error.message).toBe('Stripe is missing');
     expect(mocks.db.product.create).not.toHaveBeenCalled();
   });
 
@@ -123,7 +123,7 @@ describe('POST /api/dashboard/products', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(409);
-    expect(payload.error).toContain('Stripe Connect onboarding is required');
+    expect(payload.error.message).toContain('Stripe Connect onboarding is required');
     expect(mocks.db.product.create).not.toHaveBeenCalled();
   });
 

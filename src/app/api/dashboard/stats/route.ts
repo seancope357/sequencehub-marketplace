@@ -1,26 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/supabase/auth';
-import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
+import { requireCreatorOrAdminUser } from '@/lib/auth/guards';
+import { internalServerError } from '@/lib/api/errors';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser();
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const authResult = await requireCreatorOrAdminUser();
+    if (authResult.response) {
+      return authResult.response;
     }
-
-    if (!isCreatorOrAdmin(user)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
-      );
-    }
+    const { user } = authResult;
 
     // Apply rate limiting: 60 stats queries per hour per user
     const limitResult = await applyRateLimit(request, {
@@ -33,32 +23,42 @@ export async function GET(request: NextRequest) {
       return limitResult.response;
     }
 
-    // Get user's products
-    const products = await db.product.findMany({
-      where: { creatorId: user.id },
-      select: {
-        id: true,
-        saleCount: true,
-      },
-    });
-
-    // Get user's orders (sales)
-    const orderItems = await db.orderItem.findMany({
-      where: {
-        product: {
-          creatorId: user.id,
+    const [
+      totalProducts,
+      totalSales,
+      revenueAggregate,
+      downloadsAggregate,
+    ] = await Promise.all([
+      db.product.count({
+        where: { creatorId: user.id },
+      }),
+      db.orderItem.count({
+        where: {
+          product: {
+            creatorId: user.id,
+          },
         },
-      },
-      include: {
-        order: true,
-      },
-    });
+      }),
+      db.orderItem.aggregate({
+        where: {
+          product: {
+            creatorId: user.id,
+          },
+        },
+        _sum: {
+          priceAtPurchase: true,
+        },
+      }),
+      db.product.aggregate({
+        where: { creatorId: user.id },
+        _sum: {
+          saleCount: true,
+        },
+      }),
+    ]);
 
-    // Calculate stats
-    const totalProducts = products.length;
-    const totalSales = orderItems.length;
-    const totalRevenue = orderItems.reduce((sum, item) => sum + item.priceAtPurchase, 0);
-    const totalDownloads = products.reduce((sum, product) => sum + product.saleCount, 0);
+    const totalRevenue = revenueAggregate._sum.priceAtPurchase ?? 0;
+    const totalDownloads = downloadsAggregate._sum.saleCount ?? 0;
 
     return NextResponse.json(
       {
@@ -71,9 +71,6 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return internalServerError();
   }
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Package,
   Plus,
+  Pencil,
   Trash2,
   MoreVertical,
   Eye,
@@ -40,6 +41,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import { AppHeader } from '@/components/navigation/AppHeader';
+import { SellerSidebarNav } from '@/components/dashboard/seller/SellerSidebarNav';
 
 interface Product {
   id: string;
@@ -153,6 +155,10 @@ export default function DashboardProducts() {
       <AppHeader contextLabel="Dashboard / Products" browseLabel="Marketplace" browseHref="/" />
 
       <div className="container mx-auto px-4 py-8">
+        <div className="mb-6">
+          <SellerSidebarNav />
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold">My Products</h1>
@@ -273,6 +279,12 @@ export default function DashboardProducts() {
                               >
                                 <Eye className="h-4 w-4 mr-2" />
                                 View
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive"

@@ -20,6 +20,7 @@ import { validateFileIntegrity } from '@/lib/upload/validation';
 import { CompleteUploadResponse } from '@/lib/upload/types';
 import { AuditAction } from '@prisma/client';
 import fs from 'fs/promises';
+import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   let uploadId: string | undefined;
@@ -29,6 +30,16 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const limitResult = await applyRateLimit(request, {
+      config: RATE_LIMIT_CONFIGS.UPLOAD_FILE,
+      byUser: true,
+      byIp: false,
+      message: 'Upload completion rate limit exceeded. Please try again later.',
+    });
+    if (!limitResult.allowed) {
+      return limitResult.response;
     }
 
     // Parse request body

@@ -1,60 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { downloadFile, type FileType as StorageFileType } from '@/lib/storage';
 import { db } from '@/lib/db';
 
-const DOWNLOAD_SECRET = process.env.DOWNLOAD_SECRET || 'your-download-secret-key';
+function assertDownloadSecretConfigured(): void {
+  if (!process.env.DOWNLOAD_SECRET) {
+    throw new Error('DOWNLOAD_SECRET is required');
+  }
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { path: string[] } }
 ) {
   try {
+    assertDownloadSecretConfigured();
     const storageKey = params.path.join('/');
     const { searchParams } = new URL(request.url);
-    const expires = searchParams.get('expires');
-    const signature = searchParams.get('signature');
-    const userId = searchParams.get('userId');
+    const token = searchParams.get('token');
 
-    if (!expires || !signature || !userId) {
+    if (!token) {
       return NextResponse.json(
-        { error: 'Missing signature parameters' },
+        { error: 'Missing download token' },
         { status: 400 }
       );
     }
 
-    const expiresInt = Number.parseInt(expires, 10);
-    if (Number.isNaN(expiresInt)) {
-      return NextResponse.json(
-        { error: 'Invalid expiration timestamp' },
-        { status: 400 }
-      );
-    }
+    const tokenRecord = await db.downloadToken.findUnique({
+      where: { token },
+      select: {
+        id: true,
+        userId: true,
+        entitlementId: true,
+        fileId: true,
+        expiresAt: true,
+        usedAt: true,
+      },
+    });
 
-    const now = Math.floor(Date.now() / 1000);
-    if (expiresInt < now) {
+    if (!tokenRecord) {
       return NextResponse.json(
-        { error: 'Download link has expired' },
+        { error: 'Invalid download token' },
         { status: 403 }
       );
     }
 
-    const dataToSign = `${storageKey}:${expires}:${userId}`;
-    const expectedSignature = crypto
-      .createHmac('sha256', DOWNLOAD_SECRET)
-      .update(dataToSign)
-      .digest('hex');
-
-    if (signature !== expectedSignature) {
+    if (tokenRecord.usedAt) {
       return NextResponse.json(
-        { error: 'Invalid download signature' },
+        { error: 'Download token already used' },
+        { status: 403 }
+      );
+    }
+
+    if (tokenRecord.expiresAt.getTime() <= Date.now()) {
+      return NextResponse.json(
+        { error: 'Download token expired' },
+        { status: 403 }
+      );
+    }
+
+    const entitlement = await db.entitlement.findFirst({
+      where: {
+        id: tokenRecord.entitlementId,
+        userId: tokenRecord.userId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!entitlement) {
+      return NextResponse.json(
+        { error: 'Invalid entitlement for download token' },
         { status: 403 }
       );
     }
 
     const fileRecord = await db.productFile.findFirst({
-      where: { storageKey },
+      where: {
+        storageKey,
+        ...(tokenRecord.fileId ? { id: tokenRecord.fileId } : {}),
+      },
       select: {
+        id: true,
         fileName: true,
         originalName: true,
         mimeType: true,
@@ -66,6 +92,23 @@ export async function GET(
       return NextResponse.json(
         { error: 'File not found' },
         { status: 404 }
+      );
+    }
+
+    const tokenConsumption = await db.downloadToken.updateMany({
+      where: {
+        token,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
+    });
+
+    if (tokenConsumption.count !== 1) {
+      return NextResponse.json(
+        { error: 'Download token already used' },
+        { status: 403 }
       );
     }
 

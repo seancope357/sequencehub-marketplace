@@ -4,6 +4,9 @@ import { useRouter } from 'next/navigation';
 import {
   BarChart3,
   ChevronDown,
+  CircleHelp,
+  CreditCard,
+  ListOrdered,
   Package,
   Search,
   Settings,
@@ -67,7 +70,7 @@ export function DashboardMenu({ user, isCreatorOrAdmin, isAdmin, onLogout }: Das
         {isCreatorOrAdmin ? (
           <DropdownMenuItem onSelect={() => router.push('/dashboard/products')}>
             <Package className="h-4 w-4" />
-            Products
+            Listings
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem onSelect={() => router.push('/dashboard/creator/onboarding')}>
@@ -83,6 +86,22 @@ export function DashboardMenu({ user, isCreatorOrAdmin, isAdmin, onLogout }: Das
           <Settings className="h-4 w-4" />
           Settings
         </DropdownMenuItem>
+        {isCreatorOrAdmin ? (
+          <>
+            <DropdownMenuItem onSelect={() => router.push('/dashboard/orders')}>
+              <ListOrdered className="h-4 w-4" />
+              Orders
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => router.push('/dashboard/payouts')}>
+              <CreditCard className="h-4 w-4" />
+              Payouts
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => router.push('/dashboard/support')}>
+              <CircleHelp className="h-4 w-4" />
+              Support
+            </DropdownMenuItem>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push('/')}>
           <Package className="h-4 w-4" />

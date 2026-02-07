@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   return {
     getCurrentUser: vi.fn(),
+    applyRateLimit: vi.fn(),
     validateFile: vi.fn(),
     generateUploadId: vi.fn(),
     createUploadSession: vi.fn(),
@@ -19,6 +20,13 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/lib/supabase/auth', () => ({
   getCurrentUser: mocks.getCurrentUser,
+}));
+
+vi.mock('@/lib/rate-limit', () => ({
+  applyRateLimit: mocks.applyRateLimit,
+  RATE_LIMIT_CONFIGS: {
+    UPLOAD_FILE: {},
+  },
 }));
 
 vi.mock('@/lib/upload/validation', () => ({
@@ -51,6 +59,7 @@ describe('POST /api/upload/initiate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getCurrentUser.mockResolvedValue({ id: 'creator-1' });
+    mocks.applyRateLimit.mockResolvedValue({ allowed: true });
     mocks.validateFile.mockReturnValue({ valid: true, errors: [], warnings: [] });
     mocks.generateUploadId.mockReturnValue('upload-1');
     mocks.createUploadSession.mockResolvedValue(undefined);

@@ -6,6 +6,7 @@ import { User } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { AppHeader } from '@/components/navigation/AppHeader';
+import { SellerSidebarNav } from '@/components/dashboard/seller/SellerSidebarNav';
 
 export default function SettingsPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -31,6 +32,10 @@ export default function SettingsPage() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
+          <div className="mb-6">
+            <SellerSidebarNav />
+          </div>
+
           <h1 className="text-3xl font-bold mb-2">Account Settings</h1>
           <p className="text-muted-foreground mb-8">Manage your account and preferences</p>
 

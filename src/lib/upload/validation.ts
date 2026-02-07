@@ -4,6 +4,7 @@
  */
 
 import { FileType } from '@prisma/client';
+import { createHash } from 'crypto';
 import path from 'path';
 import { FILE_TYPE_CONFIGS, MAGIC_BYTES, FileValidationResult } from './types';
 
@@ -184,7 +185,6 @@ export function isFileNameSafe(fileName: string): boolean {
  * Validate chunk hash matches actual data
  */
 export function validateChunkHash(chunkData: Buffer, expectedHash: string): boolean {
-  const crypto = require('crypto');
-  const actualHash = crypto.createHash('md5').update(chunkData).digest('hex');
+  const actualHash = createHash('md5').update(chunkData).digest('hex');
   return actualHash === expectedHash;
 }

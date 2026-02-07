@@ -36,6 +36,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import CryptoJS from 'crypto-js';
 import { AppHeader } from '@/components/navigation/AppHeader';
+import { SellerSidebarNav } from '@/components/dashboard/seller/SellerSidebarNav';
 
 interface UploadedFile {
   id: string;
@@ -778,6 +779,10 @@ export default function NewProductPage() {
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-5xl mx-auto">
+          <div className="mb-6">
+            <SellerSidebarNav />
+          </div>
+
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div>
               <h1 className="text-3xl font-bold">New Product</h1>

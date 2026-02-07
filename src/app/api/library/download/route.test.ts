@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => {
         findFirst: vi.fn(),
         update: vi.fn(),
       },
+      downloadToken: {
+        create: vi.fn(),
+      },
     },
   };
 });
@@ -35,11 +38,13 @@ function createRequest(body: Record<string, unknown>) {
 describe('POST /api/library/download', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.DOWNLOAD_SECRET = 'test-download-secret';
     mocks.getCurrentUser.mockResolvedValue({
       id: 'buyer-1',
       email: 'buyer@example.com',
     });
     mocks.db.entitlement.update.mockResolvedValue({ id: 'entitlement-1' });
+    mocks.db.downloadToken.create.mockResolvedValue({ id: 'token-1' });
   });
 
   it('returns 401 for unauthenticated users', async () => {
@@ -85,6 +90,7 @@ describe('POST /api/library/download', () => {
             id: 'version-1',
             files: [
               {
+                id: 'file-1',
                 fileName: 'show.fseq',
                 fileSize: 1234,
                 fileType: 'RENDERED',
@@ -105,6 +111,8 @@ describe('POST /api/library/download', () => {
     expect(payload.downloadUrls).toHaveLength(1);
     expect(payload.downloadUrls[0].fileName).toBe('show.fseq');
     expect(payload.downloadUrls[0].downloadUrl).toContain('/api/media/product-files/show.fseq');
+    expect(payload.downloadUrls[0].downloadUrl).toContain('token=');
+    expect(mocks.db.downloadToken.create).toHaveBeenCalledTimes(1);
     expect(mocks.db.entitlement.update).toHaveBeenCalledWith({
       where: { id: 'entitlement-1' },
       data: {

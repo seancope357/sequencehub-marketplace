@@ -10,6 +10,7 @@ export async function GET(
   try {
     const { slug } = params;
     const user = await getCurrentUser();
+    const isAdmin = Boolean(user?.roles?.some((role) => role.role === 'ADMIN'));
 
     // Fetch product
     const product = await db.product.findUnique({
@@ -49,6 +50,14 @@ export async function GET(
     });
 
     if (!product) {
+      return NextResponse.json(
+        { error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    const isOwner = Boolean(user && product.creatorId === user.id);
+    if (product.status !== 'PUBLISHED' && !isOwner && !isAdmin) {
       return NextResponse.json(
         { error: 'Product not found' },
         { status: 404 }

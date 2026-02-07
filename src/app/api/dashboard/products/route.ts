@@ -5,23 +5,24 @@ import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import { generateDownloadUrl } from '@/lib/storage';
 import { getStripeConfigStatus } from '@/lib/stripe-connect';
+import {
+  badRequestError,
+  conflictError,
+  forbiddenError,
+  internalServerError,
+  unauthorizedError,
+} from '@/lib/api/errors';
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return unauthorizedError();
     }
 
     if (!isCreatorOrAdmin(user)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
-      );
+      return forbiddenError('Creator role required');
     }
 
     // Get user's products
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
         },
         media: {
           orderBy: { displayOrder: 'asc' },
+          take: 4,
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -78,10 +80,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error fetching products:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return internalServerError();
   }
 }
 
@@ -90,17 +89,11 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return unauthorizedError();
     }
 
     if (!isCreatorOrAdmin(user)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
-      );
+      return forbiddenError('Creator role required');
     }
 
     // Apply rate limiting: 10 product creations per hour per user
@@ -136,31 +129,19 @@ export async function POST(request: NextRequest) {
 
     // Validation
     if (!title?.trim()) {
-      return NextResponse.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      );
+      return badRequestError('Title is required');
     }
 
     if (!description?.trim()) {
-      return NextResponse.json(
-        { error: 'Description is required' },
-        { status: 400 }
-      );
+      return badRequestError('Description is required');
     }
 
     if (!category) {
-      return NextResponse.json(
-        { error: 'Category is required' },
-        { status: 400 }
-      );
+      return badRequestError('Category is required');
     }
 
     if (price === undefined || price === null) {
-      return NextResponse.json(
-        { error: 'Price is required' },
-        { status: 400 }
-      );
+      return badRequestError('Price is required');
     }
 
     const wantsPublish = status === 'PUBLISHED';
@@ -168,10 +149,7 @@ export async function POST(request: NextRequest) {
     if (wantsPublish && !isAdmin(user)) {
       const stripeConfig = getStripeConfigStatus();
       if (!stripeConfig.configured) {
-        return NextResponse.json(
-          { error: stripeConfig.message || 'Stripe Connect is not configured.' },
-          { status: 409 }
-        );
+        return conflictError(stripeConfig.message || 'Stripe Connect is not configured.');
       }
 
       const creatorAccount = await db.creatorAccount.findUnique({
@@ -180,10 +158,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!creatorAccount?.stripeAccountId || creatorAccount.onboardingStatus !== 'COMPLETED') {
-        return NextResponse.json(
-          { error: 'Stripe Connect onboarding is required before publishing products.' },
-          { status: 409 }
-        );
+        return conflictError('Stripe Connect onboarding is required before publishing products.');
       }
     }
 
@@ -199,17 +174,11 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(files) && files.length > 0) {
       for (const file of files) {
         if (!file?.fileName || !file?.fileType || !file?.fileSize) {
-          return NextResponse.json(
-            { error: 'Each file must include fileName, fileType, and fileSize' },
-            { status: 400 }
-          );
+          return badRequestError('Each file must include fileName, fileType, and fileSize');
         }
 
         if (!file?.storageKey || !file?.fileHash) {
-          return NextResponse.json(
-            { error: 'Each file must include storageKey and fileHash' },
-            { status: 400 }
-          );
+          return badRequestError('Each file must include storageKey and fileHash');
         }
       }
     }
@@ -218,17 +187,11 @@ export async function POST(request: NextRequest) {
     if (Array.isArray(media) && media.length > 0) {
       for (const item of media) {
         if (!item?.fileName || !item?.fileSize || !item?.storageKey || !item?.fileHash) {
-          return NextResponse.json(
-            { error: 'Each media item must include fileName, fileSize, storageKey, and fileHash' },
-            { status: 400 }
-          );
+          return badRequestError('Each media item must include fileName, fileSize, storageKey, and fileHash');
         }
 
         if (!item?.mediaType || !['cover', 'gallery', 'preview'].includes(item.mediaType)) {
-          return NextResponse.json(
-            { error: 'Each media item must include a valid mediaType (cover, gallery, preview)' },
-            { status: 400 }
-          );
+          return badRequestError('Each media item must include a valid mediaType (cover, gallery, preview)');
         }
       }
     }
@@ -333,10 +296,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error creating product:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return internalServerError();
   }
 }
 

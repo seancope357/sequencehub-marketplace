@@ -148,6 +148,15 @@ enum LegalDocumentType {
   @@map("legal_document_type")
 }
 
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+
+  @@map("support_ticket_status")
+}
+
 // ============================================
 // USER MANAGEMENT (Supabase Auth aligned)
 // ============================================
@@ -171,6 +180,7 @@ model User {
   downloadTokens DownloadToken[]
   uploadSessions UploadSession[]
   legalAcceptances LegalAcceptance[]
+  supportTickets SupportTicket[]
 
   @@map("users")
 }
@@ -574,6 +584,27 @@ model LegalAcceptance {
   @@index([userId, acceptedAt])
   @@index([documentId])
   @@map("legal_acceptances")
+}
+
+model SupportTicket {
+  id          String              @id @default(uuid()) @db.Uuid
+  sellerId    String              @db.Uuid @map("seller_id")
+  category    String
+  subject     String
+  description String
+  status      SupportTicketStatus @default(OPEN)
+  orderId     String?             @db.Uuid @map("order_id")
+  productId   String?             @db.Uuid @map("product_id")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  seller User @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, status])
+  @@index([orderId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("support_tickets")
 }
 
 model AccessLog {
