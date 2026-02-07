@@ -1,8 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Package, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SequenceHubLogo } from '@/components/branding/SequenceHubLogo';
 import { DashboardMenu } from '@/components/navigation/DashboardMenu';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -33,11 +34,15 @@ export function AppHeader({
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Package className="h-6 w-6 text-primary" />
-            <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}>
-              SequenceHUB
-            </span>
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              type="button"
+              className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => router.push('/')}
+              aria-label="Go to homepage"
+            >
+              <SequenceHubLogo variant="header" />
+            </button>
             {contextLabel ? (
               <>
                 <span className="text-muted-foreground">/</span>

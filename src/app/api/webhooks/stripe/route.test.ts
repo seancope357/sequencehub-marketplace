@@ -1,8 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   return {
-    headers: vi.fn(),
     stripeConstructEvent: vi.fn(),
     stripeRetrieveEvent: vi.fn(),
     createAuditLog: vi.fn(),
@@ -40,6 +39,10 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('stripe', () => ({
   default: class StripeMock {
+    static webhooks = {
+      constructEvent: mocks.stripeConstructEvent,
+    };
+
     webhooks = {
       constructEvent: mocks.stripeConstructEvent,
     };
@@ -48,10 +51,6 @@ vi.mock('stripe', () => ({
       retrieve: mocks.stripeRetrieveEvent,
     };
   },
-}));
-
-vi.mock('next/headers', () => ({
-  headers: mocks.headers,
 }));
 
 vi.mock('@/lib/supabase/auth', () => ({
@@ -73,25 +72,25 @@ vi.mock('@/lib/stripe-connect', () => ({
 
 import { POST } from './route';
 
-function createRequest(body = '{}') {
+function createRequest(body = '{}', signature: string | null = 'sig_test_123') {
+  const headers = new Headers();
+  if (signature) {
+    headers.set('stripe-signature', signature);
+  }
+
   return new Request('http://localhost/api/webhooks/stripe', {
     method: 'POST',
+    headers,
     body,
   });
 }
 
 describe('POST /api/webhooks/stripe', () => {
+  const originalWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.headers.mockReturnValue({
-      get: (key: string) => {
-        if (key === 'stripe-signature') {
-          return 'sig_test_123';
-        }
-
-        return null;
-      },
-    });
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_123';
     mocks.stripeConstructEvent.mockReturnValue({
       id: 'evt_123',
       type: 'sequencehub.unhandled',
@@ -104,10 +103,17 @@ describe('POST /api/webhooks/stripe', () => {
     mocks.createAuditLog.mockResolvedValue(undefined);
   });
 
-  it('returns 400 when signature header is missing', async () => {
-    mocks.headers.mockReturnValueOnce({ get: () => null });
+  afterAll(() => {
+    if (originalWebhookSecret === undefined) {
+      delete process.env.STRIPE_WEBHOOK_SECRET;
+      return;
+    }
 
-    const response = await POST(createRequest() as any);
+    process.env.STRIPE_WEBHOOK_SECRET = originalWebhookSecret;
+  });
+
+  it('returns 400 when signature header is missing', async () => {
+    const response = await POST(createRequest('{}', null) as any);
     const payload = await response.json();
 
     expect(response.status).toBe(400);

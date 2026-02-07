@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAuditLog, ensureUserRecord } from '@/lib/supabase/auth';
 import { createRouteHandlerClient, applyCookieChanges } from '@/lib/supabase/route-handler';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
+import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH, isValidEmail, normalizeEmail } from '@/lib/auth/registration';
+import { z } from 'zod';
+
+const loginSchema = z.object({
+  email: z.string().min(1, 'Email is required').max(EMAIL_MAX_LENGTH, 'Email is too long'),
+  password: z.string().min(1, 'Password is required').max(PASSWORD_MAX_LENGTH, 'Password is too long'),
+});
+
+function mapLoginError(message: string | undefined): string {
+  const normalized = (message || '').toLowerCase();
+
+  if (
+    normalized.includes('invalid login credentials') ||
+    normalized.includes('invalid email or password') ||
+    normalized.includes('email not found') ||
+    normalized.includes('user not found')
+  ) {
+    return 'Invalid email or password';
+  }
+
+  // Keep account-specific states generic to avoid account enumeration.
+  if (normalized.includes('not confirmed') || normalized.includes('not verified')) {
+    return 'Invalid email or password';
+  }
+
+  return message || 'Invalid email or password';
+}
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting: 10 attempts per 15 minutes per IP
@@ -17,13 +44,46 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { email, password } = body;
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
+
+    const payload = body as { email?: unknown; password?: unknown };
+    if (!payload?.email || !payload?.password) {
+      return NextResponse.json(
+        { error: 'Email and password are required' },
+        { status: 400 }
+      );
+    }
+
+    const parsed = loginSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || 'Invalid login data' },
+        { status: 400 }
+      );
+    }
+
+    const email = normalizeEmail(parsed.data.email);
+    const password = parsed.data.password;
 
     // Validate input
     if (!email || !password) {
       return NextResponse.json(
         { error: 'Email and password are required' },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidEmail(email)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
         { status: 400 }
       );
     }
@@ -36,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     if (error || !data.user) {
       return NextResponse.json(
-        { error: error?.message || 'Invalid email or password' },
+        { error: mapLoginError(error?.message) },
         { status: 401 }
       );
     }

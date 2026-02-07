@@ -20,15 +20,18 @@ export async function GET(request: NextRequest) {
         isActive: true,
       },
       include: {
-        product: {
+        product: true,
+        version: true,
+        order: {
           include: {
-            versions: {
-              where: { isLatest: true },
-              take: 1,
+            items: {
+              select: {
+                productId: true,
+                priceAtPurchase: true,
+              },
             },
           },
         },
-        order: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -36,29 +39,35 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform data
-    const purchases = entitlements.map((entitlement) => ({
-      id: entitlement.id,
-      orderNumber: entitlement.order.orderNumber,
-      product: {
-        id: entitlement.product.id,
-        slug: entitlement.product.slug,
-        title: entitlement.product.title,
-        category: entitlement.product.category,
-        description: entitlement.product.description,
-        includesFSEQ: entitlement.product.includesFSEQ,
-        includesSource: entitlement.product.includesSource,
-      },
-      version: entitlement.product.versions[0]
-        ? {
-            id: entitlement.product.versions[0].id,
-            versionNumber: entitlement.product.versions[0].versionNumber,
-            versionName: entitlement.product.versions[0].versionName,
-            publishedAt: entitlement.product.versions[0].publishedAt?.toISOString() || '',
-          }
-        : null,
-      price: entitlement.order.totalAmount / entitlement.order.items.length, // Approximate price per item
-      purchasedAt: entitlement.createdAt.toISOString(),
-    }));
+    const purchases = entitlements.map((entitlement) => {
+      const matchingOrderItem = entitlement.order.items.find(
+        (item) => item.productId === entitlement.productId,
+      );
+
+      return {
+        id: entitlement.id,
+        orderNumber: entitlement.order.orderNumber,
+        product: {
+          id: entitlement.product.id,
+          slug: entitlement.product.slug,
+          title: entitlement.product.title,
+          category: entitlement.product.category,
+          description: entitlement.product.description,
+          includesFSEQ: entitlement.product.includesFSEQ,
+          includesSource: entitlement.product.includesSource,
+        },
+        version: entitlement.version
+          ? {
+              id: entitlement.version.id,
+              versionNumber: entitlement.version.versionNumber,
+              versionName: entitlement.version.versionName,
+              publishedAt: entitlement.version.publishedAt?.toISOString() || '',
+            }
+          : null,
+        price: matchingOrderItem?.priceAtPurchase ?? entitlement.order.totalAmount,
+        purchasedAt: entitlement.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json(
       { purchases },

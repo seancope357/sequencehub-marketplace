@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   return {
@@ -63,8 +63,11 @@ function createRequest(body: Record<string, unknown>) {
 }
 
 describe('POST /api/checkout/create', () => {
+  const originalStripeSecret = process.env.STRIPE_SECRET_KEY;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.STRIPE_SECRET_KEY = 'sk_test_123';
     mocks.getCurrentUser.mockResolvedValue({
       id: 'buyer-1',
       email: 'buyer@example.com',
@@ -97,6 +100,15 @@ describe('POST /api/checkout/create', () => {
       url: 'https://checkout.stripe.com/pay/cs_test_123',
     });
     mocks.db.checkoutSession.create.mockResolvedValue({ id: 'checkout-1' });
+  });
+
+  afterAll(() => {
+    if (originalStripeSecret === undefined) {
+      delete process.env.STRIPE_SECRET_KEY;
+      return;
+    }
+
+    process.env.STRIPE_SECRET_KEY = originalStripeSecret;
   });
 
   it('returns 409 when Stripe is not configured', async () => {

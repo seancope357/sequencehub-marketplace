@@ -79,7 +79,7 @@ describe('POST /api/auth/register', () => {
     });
 
     const response = await POST(
-      createRequest({ email: 'new@example.com', password: 'password123' }) as any
+      createRequest({ email: 'new@example.com', password: 'Password123', acceptedLegal: true }) as any
     );
 
     expect(response.status).toBe(429);
@@ -87,7 +87,7 @@ describe('POST /api/auth/register', () => {
 
   it('returns 400 for invalid email format', async () => {
     const response = await POST(
-      createRequest({ email: 'invalid-email', password: 'password123' }) as any
+      createRequest({ email: 'invalid-email', password: 'Password123', acceptedLegal: true }) as any
     );
     const payload = await response.json();
 
@@ -97,12 +97,22 @@ describe('POST /api/auth/register', () => {
 
   it('returns 400 for weak passwords', async () => {
     const response = await POST(
-      createRequest({ email: 'new@example.com', password: 'short' }) as any
+      createRequest({ email: 'new@example.com', password: 'short', acceptedLegal: true }) as any
     );
     const payload = await response.json();
 
     expect(response.status).toBe(400);
     expect(payload.error).toBe('Password must be at least 8 characters long');
+  });
+
+  it('returns 400 when legal terms are not accepted', async () => {
+    const response = await POST(
+      createRequest({ email: 'new@example.com', password: 'Password123', acceptedLegal: false }) as any
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toContain('must accept');
   });
 
   it('returns 409 when Supabase rejects sign up', async () => {
@@ -112,19 +122,19 @@ describe('POST /api/auth/register', () => {
     });
 
     const response = await POST(
-      createRequest({ email: 'new@example.com', password: 'password123' }) as any
+      createRequest({ email: 'new@example.com', password: 'Password123', acceptedLegal: true }) as any
     );
     const payload = await response.json();
 
     expect(response.status).toBe(409);
-    expect(payload.error).toBe('User already registered');
+    expect(payload.error).toBe('An account with this email already exists. Please sign in.');
   });
 
   it('returns 500 when user profile cannot be ensured', async () => {
     mocks.ensureUserRecord.mockResolvedValueOnce(null);
 
     const response = await POST(
-      createRequest({ email: 'new@example.com', password: 'password123' }) as any
+      createRequest({ email: 'new@example.com', password: 'Password123', acceptedLegal: true }) as any
     );
     const payload = await response.json();
 
@@ -134,7 +144,7 @@ describe('POST /api/auth/register', () => {
 
   it('returns created user payload and triggers welcome email', async () => {
     const response = await POST(
-      createRequest({ email: 'new@example.com', password: 'password123', name: 'New User' }) as any
+      createRequest({ email: ' new@example.com ', password: 'Password123', name: 'New User', acceptedLegal: true }) as any
     );
     const payload = await response.json();
 
@@ -145,6 +155,11 @@ describe('POST /api/auth/register', () => {
       name: 'New User',
       roles: [{ role: 'BUYER' }],
     });
+    expect(mocks.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'new@example.com',
+      })
+    );
     expect(mocks.createAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',

@@ -1,21 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { headers } from 'next/headers';
 import { db } from '@/lib/db';
 import { createAuditLog } from '@/lib/supabase/auth';
 import { sendPurchaseConfirmation, sendSaleNotification } from '@/lib/email/send';
 import { updateCreatorAccountStatus } from '@/lib/stripe-connect';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-12-18.acacia',
-});
+const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2024-12-18.acacia';
+let stripeClient: Stripe | null = null;
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+function getStripeClientOrNull(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    return null;
+  }
+
+  if (!stripeClient) {
+    stripeClient = new Stripe(key, { apiVersion: STRIPE_API_VERSION });
+  }
+
+  return stripeClient;
+}
+
+function getWebhookSecret(): string | null {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || !secret.trim()) {
+    return null;
+  }
+
+  return secret;
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
-    const signature = headers().get('stripe-signature');
+    const signature = request.headers.get('stripe-signature');
 
     if (!signature) {
       return NextResponse.json(
@@ -24,10 +42,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const webhookSecret = getWebhookSecret();
+    if (!webhookSecret) {
+      return NextResponse.json(
+        { error: 'Stripe webhook is not configured.' },
+        { status: 409 }
+      );
+    }
+
     let event: Stripe.Event;
 
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = Stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
       console.error('Webhook signature verification failed:', err);
       return NextResponse.json(
@@ -40,12 +66,17 @@ export async function POST(request: NextRequest) {
     // Thin events only contain minimal data - we need to fetch the complete event
     if (event.data && 'object' in event.data && event.data.object === 'event') {
       console.log('[Webhook] Detected thin event, fetching full event data...');
-      try {
-        event = await stripe.events.retrieve(event.id);
-        console.log('[Webhook] Successfully fetched full event data');
-      } catch (error) {
-        console.error('[Webhook] Failed to fetch full event data:', error);
-        // Continue with thin event if fetch fails (graceful degradation)
+      const stripe = getStripeClientOrNull();
+      if (stripe) {
+        try {
+          event = await stripe.events.retrieve(event.id);
+          console.log('[Webhook] Successfully fetched full event data');
+        } catch (error) {
+          console.error('[Webhook] Failed to fetch full event data:', error);
+          // Continue with thin event if fetch fails (graceful degradation)
+        }
+      } else {
+        console.error('[Webhook] STRIPE_SECRET_KEY missing, cannot retrieve full thin event data');
       }
     }
 

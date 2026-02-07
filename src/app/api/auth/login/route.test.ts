@@ -85,6 +85,14 @@ describe('POST /api/auth/login', () => {
     expect(payload.error).toBe('Email and password are required');
   });
 
+  it('returns 400 for invalid email format', async () => {
+    const response = await POST(createRequest({ email: 'invalid-email', password: 'password123' }) as any);
+    const payload = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe('Invalid email format');
+  });
+
   it('returns 401 when Supabase login fails', async () => {
     mocks.signInWithPassword.mockResolvedValueOnce({
       data: { user: null },
@@ -95,7 +103,7 @@ describe('POST /api/auth/login', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(401);
-    expect(payload.error).toBe('Invalid login credentials');
+    expect(payload.error).toBe('Invalid email or password');
   });
 
   it('returns 500 when user profile cannot be ensured', async () => {
@@ -109,7 +117,7 @@ describe('POST /api/auth/login', () => {
   });
 
   it('returns authenticated user payload on success', async () => {
-    const response = await POST(createRequest({ email: 'a@b.com', password: 'password123' }) as any);
+    const response = await POST(createRequest({ email: ' A@B.com ', password: 'password123' }) as any);
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -125,6 +133,10 @@ describe('POST /api/auth/login', () => {
         action: 'USER_LOGIN',
       })
     );
+    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
+      email: 'a@b.com',
+      password: 'password123',
+    });
     expect(mocks.applyCookieChanges).toHaveBeenCalledTimes(1);
   });
 });

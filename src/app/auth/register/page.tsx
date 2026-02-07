@@ -1,14 +1,26 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Package, Mail, Lock, User, ArrowRight, Check } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { SequenceHubLogo } from '@/components/branding/SequenceHubLogo';
 import { useAuthStore } from '@/lib/store/auth-store';
+import {
+  NAME_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  getPasswordChecks,
+  getPasswordStrengthMessage,
+  isPasswordStrong,
+  isValidEmail,
+  normalizeEmail,
+  normalizeName,
+} from '@/lib/auth/registration';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,19 +28,35 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { setUser } = useAuthStore();
+
+  const normalizedEmail = normalizeEmail(email);
+  const passwordChecks = getPasswordChecks(password);
+  const isEmailValid = email.length > 0 ? isValidEmail(normalizedEmail) : false;
+  const isPasswordValid = isPasswordStrong(password);
+  const passwordsMatch = password.length > 0 && confirmPassword.length > 0 && password === confirmPassword;
+  const canSubmit = isEmailValid && isPasswordValid && passwordsMatch && acceptedLegal && !isLoading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !password) {
+    const cleanEmail = normalizeEmail(email);
+    const cleanName = normalizeName(name);
+
+    if (!cleanEmail || !password) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    if (password.length < 8) {
-      toast.error('Password must be at least 8 characters');
+    if (!isValidEmail(cleanEmail)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    if (!isPasswordStrong(password)) {
+      toast.error(getPasswordStrengthMessage(password));
       return;
     }
 
@@ -37,12 +65,22 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!acceptedLegal) {
+      toast.error('You must accept the Terms, Privacy Policy, and Refund Policy');
+      return;
+    }
+
     try {
       setIsLoading(true);
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({
+          email: cleanEmail,
+          password,
+          name: cleanName,
+          acceptedLegal: true,
+        }),
         credentials: 'include',
       });
 
@@ -54,10 +92,9 @@ export default function RegisterPage() {
 
         toast.success(`Welcome, ${data.user.name || data.user.email}!`);
 
-        // Redirect to dashboard
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 100);
+        // Replace instead of push so users cannot navigate back to the signup form accidentally.
+        router.replace('/dashboard');
+        router.refresh();
       } else {
         const error = await response.json();
         toast.error(error.error || 'Registration failed');
@@ -75,10 +112,9 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Package className="h-12 w-12 text-primary" />
+          <div className="flex items-center justify-center mb-2">
+            <SequenceHubLogo variant="auth" />
           </div>
-          <h1 className="text-3xl font-bold">SequenceHUB</h1>
           <p className="text-muted-foreground">
             Marketplace for xLights Sequences
           </p>
@@ -105,6 +141,7 @@ export default function RegisterPage() {
                     placeholder="Your name"
                     className="pl-10"
                     autoComplete="name"
+                    maxLength={NAME_MAX_LENGTH}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
@@ -121,14 +158,19 @@ export default function RegisterPage() {
                     type="email"
                     placeholder="you@example.com"
                     className="pl-10"
-                    autoComplete="username"
+                    autoComplete="email"
                     inputMode="email"
                     autoCapitalize="none"
+                    autoCorrect="off"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={() => setEmail((current) => normalizeEmail(current))}
                     required
                   />
                 </div>
+                {email.length > 0 && !isEmailValid && (
+                  <p className="text-xs text-destructive">Please enter a valid email address.</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -142,10 +184,29 @@ export default function RegisterPage() {
                     placeholder="Min. 8 characters"
                     className="pl-10"
                     autoComplete="new-password"
+                    minLength={PASSWORD_MIN_LENGTH}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
+                </div>
+                <div className="space-y-1 text-xs">
+                  <div className={passwordChecks.minLength ? 'text-green-600' : 'text-muted-foreground'}>
+                    <Check className="inline mr-1 h-3 w-3" />
+                    At least {PASSWORD_MIN_LENGTH} characters
+                  </div>
+                  <div className={passwordChecks.hasLowercase ? 'text-green-600' : 'text-muted-foreground'}>
+                    <Check className="inline mr-1 h-3 w-3" />
+                    One lowercase letter
+                  </div>
+                  <div className={passwordChecks.hasUppercase ? 'text-green-600' : 'text-muted-foreground'}>
+                    <Check className="inline mr-1 h-3 w-3" />
+                    One uppercase letter
+                  </div>
+                  <div className={passwordChecks.hasNumber ? 'text-green-600' : 'text-muted-foreground'}>
+                    <Check className="inline mr-1 h-3 w-3" />
+                    One number
+                  </div>
                 </div>
               </div>
 
@@ -160,6 +221,7 @@ export default function RegisterPage() {
                     placeholder="Re-enter password"
                     className="pl-10"
                     autoComplete="new-password"
+                    minLength={PASSWORD_MIN_LENGTH}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
@@ -171,12 +233,42 @@ export default function RegisterPage() {
                     Passwords match
                   </div>
                 )}
+                {password && confirmPassword && password !== confirmPassword && (
+                  <div className="text-sm text-destructive">Passwords do not match</div>
+                )}
+              </div>
+
+              <div className="flex items-start gap-2 rounded-md border p-3">
+                <input
+                  id="acceptedLegal"
+                  name="acceptedLegal"
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={acceptedLegal}
+                  onChange={(e) => setAcceptedLegal(e.target.checked)}
+                  required
+                />
+                <Label htmlFor="acceptedLegal" className="text-sm leading-6 font-normal">
+                  I agree to the{' '}
+                  <Link href="/legal/terms" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-primary">
+                    Terms of Service
+                  </Link>
+                  ,{' '}
+                  <Link href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-primary">
+                    Privacy Policy
+                  </Link>
+                  , and{' '}
+                  <Link href="/legal/refunds" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-primary">
+                    Refund Policy
+                  </Link>
+                  .
+                </Label>
               </div>
 
               <Button
                 type="submit"
                 className="w-full"
-                disabled={isLoading}
+                disabled={!canSubmit}
               >
                 {isLoading ? 'Creating account...' : 'Create Account'}
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -187,21 +279,21 @@ export default function RegisterPage() {
               <span className="text-muted-foreground">
                 Already have an account?{' '}
               </span>
-              <a
+              <Link
                 href="/auth/login"
                 className="text-primary hover:underline font-medium"
               >
                 Sign in
-              </a>
+              </Link>
             </div>
 
             <div className="mt-6 text-center">
-              <a
+              <Link
                 href="/"
                 className="text-sm text-muted-foreground hover:text-primary"
               >
                 Back to Marketplace
-              </a>
+              </Link>
             </div>
           </CardContent>
         </Card>

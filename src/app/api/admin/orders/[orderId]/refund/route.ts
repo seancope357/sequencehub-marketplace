@@ -5,9 +5,21 @@ import { isAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { getStripeConfigStatus } from '@/lib/stripe-connect';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-12-18.acacia',
-});
+const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2024-12-18.acacia';
+let stripeClient: Stripe | null = null;
+
+function getStripeClient(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error('Stripe is not configured.');
+  }
+
+  if (!stripeClient) {
+    stripeClient = new Stripe(key, { apiVersion: STRIPE_API_VERSION });
+  }
+
+  return stripeClient;
+}
 
 export async function POST(
   request: NextRequest,
@@ -55,6 +67,7 @@ export async function POST(
       );
     }
 
+    const stripe = getStripeClient();
     const refund = await stripe.refunds.create({
       payment_intent: order.paymentIntentId,
     });
