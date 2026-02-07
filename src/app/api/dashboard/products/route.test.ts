@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => {
         findUnique: vi.fn(),
       },
       product: {
+        findUnique: vi.fn(),
         create: vi.fn(),
       },
+      $transaction: vi.fn(),
     },
   };
 });
@@ -79,6 +81,7 @@ describe('POST /api/dashboard/products', () => {
       stripeAccountId: 'acct_123',
       onboardingStatus: 'COMPLETED',
     });
+    mocks.db.product.findUnique.mockResolvedValue(null);
     mocks.db.product.create.mockResolvedValue({
       id: 'product-1',
       slug: 'test-product',
@@ -140,5 +143,33 @@ describe('POST /api/dashboard/products', () => {
     });
     expect(mocks.db.creatorAccount.findUnique).not.toHaveBeenCalled();
     expect(mocks.db.product.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('finalizes an existing draft when draftId is provided', async () => {
+    const draftId = '22222222-2222-4222-8222-222222222222';
+
+    mocks.db.product.findUnique
+      .mockResolvedValueOnce({
+        id: draftId,
+        creatorId: 'user-1',
+        slug: 'existing-draft',
+        status: 'DRAFT',
+      })
+      .mockResolvedValueOnce(null);
+    mocks.db.$transaction.mockResolvedValueOnce(undefined);
+
+    const response = await POST(
+      createRequest({
+        ...baseBody,
+        draftId,
+        status: 'PUBLISHED',
+      }) as any
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.product.id).toBe(draftId);
+    expect(mocks.db.$transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.db.product.create).not.toHaveBeenCalled();
   });
 });

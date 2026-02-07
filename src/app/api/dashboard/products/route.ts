@@ -13,6 +13,37 @@ import {
   unauthorizedError,
 } from '@/lib/api/errors';
 
+function buildSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 100);
+}
+
+async function resolveUniqueSlug(baseSlug: string, excludeProductId?: string): Promise<string> {
+  let candidate = baseSlug;
+  let attempt = 0;
+
+  while (attempt < 1000) {
+    const existing = await db.product.findUnique({
+      where: { slug: candidate },
+      select: { id: true },
+    });
+
+    if (!existing || existing.id === excludeProductId) {
+      return candidate;
+    }
+
+    attempt += 1;
+    candidate = `${baseSlug}-${attempt}`;
+  }
+
+  return `${baseSlug}-${Date.now()}`;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
@@ -110,6 +141,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
+      draftId,
       title,
       description,
       category,
@@ -162,13 +194,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate slug from title
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '-')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .substring(0, 100);
+    const baseSlug = buildSlug(title);
+    if (!baseSlug) {
+      return badRequestError('Unable to generate slug from title');
+    }
 
     // Validate files payload (if present)
     if (Array.isArray(files) && files.length > 0) {
@@ -196,90 +225,260 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create product
-    const product = await db.product.create({
-      data: {
-        slug,
-        creatorId: user.id,
-        title,
-        description,
-        category,
-        status,
-        licenseType: licenseType || 'PERSONAL',
-        seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
-        includesFSEQ: includesFSEQ || false,
-        includesSource: includesSource || false,
-        xLightsVersionMin,
-        xLightsVersionMax,
-        targetUse,
-        expectedProps,
-        prices: {
-          create: {
+    let productIdForAudit: string;
+    let productSlugForResponse: string;
+    let auditAction: 'PRODUCT_CREATED' | 'PRODUCT_UPDATED' = 'PRODUCT_CREATED';
+
+    if (draftId) {
+      const existingDraft = await db.product.findUnique({
+        where: { id: draftId },
+        select: {
+          id: true,
+          creatorId: true,
+          slug: true,
+          status: true,
+        },
+      });
+
+      if (!existingDraft || existingDraft.creatorId !== user.id) {
+        return forbiddenError('Draft not found for this creator');
+      }
+
+      const slug = await resolveUniqueSlug(baseSlug, existingDraft.id);
+
+      await db.$transaction(async (tx) => {
+        await tx.product.update({
+          where: { id: existingDraft.id },
+          data: {
+            slug,
+            title,
+            description,
+            category,
+            status,
+            licenseType: licenseType || 'PERSONAL',
+            seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
+            includesFSEQ: includesFSEQ || false,
+            includesSource: includesSource || false,
+            xLightsVersionMin,
+            xLightsVersionMax,
+            targetUse,
+            expectedProps,
+          },
+        });
+
+        await tx.price.updateMany({
+          where: { productId: existingDraft.id, isActive: true },
+          data: { isActive: false },
+        });
+
+        await tx.price.create({
+          data: {
+            productId: existingDraft.id,
             amount: parseFloat(price),
             currency: 'USD',
             isActive: true,
           },
-        },
-        media: media.length
-          ? {
-              create: media.map((item: any, index: number) => ({
-                mediaType: item.mediaType,
-                fileName: item.fileName,
-                originalName: item.originalName || item.fileName,
-                fileSize: item.fileSize,
-                fileHash: item.fileHash,
-                storageKey: item.storageKey,
-                mimeType: item.mimeType || getMimeType(item.fileName),
-                width: item.width || null,
-                height: item.height || null,
-                altText: item.altText || null,
-                displayOrder: item.displayOrder ?? index,
-              })),
-            }
-          : undefined,
-        versions: {
-          create: {
-            versionNumber: 1,
-            versionName: '1.0.0',
+        });
+
+        await tx.productMedia.deleteMany({
+          where: { productId: existingDraft.id },
+        });
+
+        if (media.length > 0) {
+          await tx.productMedia.createMany({
+            data: media.map((item: any, index: number) => ({
+              productId: existingDraft.id,
+              mediaType: item.mediaType,
+              fileName: item.fileName,
+              originalName: item.originalName || item.fileName,
+              fileSize: item.fileSize,
+              fileHash: item.fileHash,
+              storageKey: item.storageKey,
+              mimeType: item.mimeType || getMimeType(item.fileName),
+              width: item.width || null,
+              height: item.height || null,
+              altText: item.altText || null,
+              displayOrder: item.displayOrder ?? index,
+            })),
+          });
+        }
+
+        const latestVersion = await tx.productVersion.findFirst({
+          where: {
+            productId: existingDraft.id,
             isLatest: true,
-            publishedAt: status === 'PUBLISHED' ? new Date() : null,
-            files: files.length
-              ? {
-                  create: files.map((file: any) => ({
-                    fileName: file.fileName,
-                    originalName: file.originalName || file.fileName,
-                    fileType: file.fileType,
-                    fileSize: file.fileSize,
-                    fileHash: file.fileHash,
-                    storageKey: file.storageKey,
-                    mimeType: file.mimeType || getMimeType(file.fileName),
-                    metadata: file.metadata
-                      ? typeof file.metadata === 'string'
-                        ? file.metadata
-                        : JSON.stringify(file.metadata)
-                      : null,
-                    sequenceLength: file.sequenceLength,
-                    fps: file.fps,
-                    channelCount: file.channelCount,
-                  })),
-                }
-              : undefined,
+          },
+          orderBy: {
+            versionNumber: 'desc',
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!latestVersion) {
+          await tx.productVersion.create({
+            data: {
+              productId: existingDraft.id,
+              versionNumber: 1,
+              versionName: '1.0.0',
+              isLatest: true,
+              publishedAt: status === 'PUBLISHED' ? new Date() : null,
+              files: files.length
+                ? {
+                    create: files.map((file: any) => ({
+                      fileName: file.fileName,
+                      originalName: file.originalName || file.fileName,
+                      fileType: file.fileType,
+                      fileSize: file.fileSize,
+                      fileHash: file.fileHash,
+                      storageKey: file.storageKey,
+                      mimeType: file.mimeType || getMimeType(file.fileName),
+                      metadata: file.metadata
+                        ? typeof file.metadata === 'string'
+                          ? file.metadata
+                          : JSON.stringify(file.metadata)
+                        : null,
+                      sequenceLength: file.sequenceLength,
+                      fps: file.fps,
+                      channelCount: file.channelCount,
+                    })),
+                  }
+                : undefined,
+            },
+          });
+        } else {
+          await tx.productVersion.update({
+            where: { id: latestVersion.id },
+            data: {
+              publishedAt: status === 'PUBLISHED' ? new Date() : null,
+            },
+          });
+
+          await tx.productFile.deleteMany({
+            where: { versionId: latestVersion.id },
+          });
+
+          if (files.length > 0) {
+            await tx.productFile.createMany({
+              data: files.map((file: any) => ({
+                versionId: latestVersion.id,
+                fileName: file.fileName,
+                originalName: file.originalName || file.fileName,
+                fileType: file.fileType,
+                fileSize: file.fileSize,
+                fileHash: file.fileHash,
+                storageKey: file.storageKey,
+                mimeType: file.mimeType || getMimeType(file.fileName),
+                metadata: file.metadata
+                  ? typeof file.metadata === 'string'
+                    ? file.metadata
+                    : JSON.stringify(file.metadata)
+                  : null,
+                sequenceLength: file.sequenceLength,
+                fps: file.fps,
+                channelCount: file.channelCount,
+              })),
+            });
+          }
+        }
+      });
+
+      productIdForAudit = existingDraft.id;
+      productSlugForResponse = slug;
+      auditAction = 'PRODUCT_UPDATED';
+    } else {
+      const slug = await resolveUniqueSlug(baseSlug);
+
+      const product = await db.product.create({
+        data: {
+          slug,
+          creatorId: user.id,
+          title,
+          description,
+          category,
+          status,
+          licenseType: licenseType || 'PERSONAL',
+          seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
+          includesFSEQ: includesFSEQ || false,
+          includesSource: includesSource || false,
+          xLightsVersionMin,
+          xLightsVersionMax,
+          targetUse,
+          expectedProps,
+          prices: {
+            create: {
+              amount: parseFloat(price),
+              currency: 'USD',
+              isActive: true,
+            },
+          },
+          media: media.length
+            ? {
+                create: media.map((item: any, index: number) => ({
+                  mediaType: item.mediaType,
+                  fileName: item.fileName,
+                  originalName: item.originalName || item.fileName,
+                  fileSize: item.fileSize,
+                  fileHash: item.fileHash,
+                  storageKey: item.storageKey,
+                  mimeType: item.mimeType || getMimeType(item.fileName),
+                  width: item.width || null,
+                  height: item.height || null,
+                  altText: item.altText || null,
+                  displayOrder: item.displayOrder ?? index,
+                })),
+              }
+            : undefined,
+          versions: {
+            create: {
+              versionNumber: 1,
+              versionName: '1.0.0',
+              isLatest: true,
+              publishedAt: status === 'PUBLISHED' ? new Date() : null,
+              files: files.length
+                ? {
+                    create: files.map((file: any) => ({
+                      fileName: file.fileName,
+                      originalName: file.originalName || file.fileName,
+                      fileType: file.fileType,
+                      fileSize: file.fileSize,
+                      fileHash: file.fileHash,
+                      storageKey: file.storageKey,
+                      mimeType: file.mimeType || getMimeType(file.fileName),
+                      metadata: file.metadata
+                        ? typeof file.metadata === 'string'
+                          ? file.metadata
+                          : JSON.stringify(file.metadata)
+                        : null,
+                      sequenceLength: file.sequenceLength,
+                      fps: file.fps,
+                      channelCount: file.channelCount,
+                    })),
+                  }
+                : undefined,
+            },
           },
         },
-      },
-    });
+      });
+
+      productIdForAudit = product.id;
+      productSlugForResponse = product.slug;
+      auditAction = 'PRODUCT_CREATED';
+    }
 
     // Create audit log
     await createAuditLog({
       userId: user.id,
-      action: 'PRODUCT_CREATED',
+      action: auditAction,
       entityType: 'product',
-      entityId: product.id,
+      entityId: productIdForAudit,
       changes: JSON.stringify({
         title,
         status,
         category,
         price,
+        draftId: draftId || null,
       }),
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
       userAgent: request.headers.get('user-agent') || undefined,
@@ -288,11 +487,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         product: {
-          id: product.id,
-          slug: product.slug,
+          id: productIdForAudit,
+          slug: productSlugForResponse,
         },
       },
-      { status: 201 }
+      { status: draftId ? 200 : 201 }
     );
   } catch (error) {
     console.error('Error creating product:', error);

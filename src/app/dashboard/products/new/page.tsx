@@ -1,86 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Package,
-  Upload,
-  Save,
-  Eye,
-  Trash2,
-  Plus,
-  X,
-  DollarSign,
-  Check,
-  AlertCircle,
-  CreditCard,
-} from 'lucide-react';
+import { AlertCircle, CreditCard, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-import CryptoJS from 'crypto-js';
+import { useAuth } from '@/hooks/use-auth';
 import { AppHeader } from '@/components/navigation/AppHeader';
 import { SellerSidebarNav } from '@/components/dashboard/seller/SellerSidebarNav';
-
-interface UploadedFile {
-  id: string;
-  file: File;
-  fileName: string;
-  fileSize: number;
-  fileType: 'SOURCE' | 'RENDERED' | 'ASSET' | 'PREVIEW';
-  uploadProgress?: number;
-  uploadedFileId?: string;
-  storageKey?: string;
-  fileHash?: string;
-  mimeType?: string;
-  metadata?: Record<string, any>;
-  sequenceLength?: number;
-  fps?: number;
-  channelCount?: number;
-  uploadError?: string;
-}
-
-interface UploadedMedia {
-  id: string;
-  file: File;
-  fileName: string;
-  fileSize: number;
-  fileType: 'PREVIEW';
-  mediaType: 'cover' | 'gallery' | 'preview';
-  uploadProgress?: number;
-  storageKey?: string;
-  fileHash?: string;
-  mimeType?: string;
-  uploadError?: string;
-}
-
-const CATEGORIES = [
-  { value: 'CHRISTMAS', label: 'Christmas' },
-  { value: 'HALLOWEEN', label: 'Halloween' },
-  { value: 'PIXEL_TREE', label: 'Pixel Tree' },
-  { value: 'MELODY', label: 'Melody' },
-  { value: 'MATRIX', label: 'Matrix' },
-  { value: 'ARCH', label: 'Arch' },
-  { value: 'PROP', label: 'Prop' },
-  { value: 'FACEBOOK', label: 'Facebook' },
-  { value: 'OTHER', label: 'Other' },
-];
+import { ListingFormTabs } from '@/components/dashboard/listing/ListingFormTabs';
+import { ListingPreviewPane } from '@/components/dashboard/listing/ListingPreviewPane';
+import { computePublishReadiness } from '@/components/dashboard/listing/utils';
+import { useListingUploadManager } from '@/components/dashboard/listing/useListingUploadManager';
 
 interface StripeOnboardingStatus {
   hasAccount: boolean;
@@ -97,55 +29,68 @@ interface StripeOnboardingStatus {
   stripeError?: string;
 }
 
-const SIMPLE_UPLOAD_MAX_SIZE = 10 * 1024 * 1024; // 10MB
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB (must match server)
-
 export default function NewProductPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [activeTab, setActiveTab] = useState('basic');
 
-  // Stripe Connect status
   const [stripeStatus, setStripeStatus] = useState<StripeOnboardingStatus | null>(null);
   const [stripeLoading, setStripeLoading] = useState(true);
 
-  // Basic Info
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autosaveMessage, setAutosaveMessage] = useState('');
+
+  const autosaveInFlight = useRef(false);
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
 
-  // xLights Metadata
   const [xLightsVersionMin, setXLightsVersionMin] = useState('');
   const [xLightsVersionMax, setXLightsVersionMax] = useState('');
   const [targetUse, setTargetUse] = useState('');
   const [expectedProps, setExpectedProps] = useState('');
 
-  // File Options
   const [includesFSEQ, setIncludesFSEQ] = useState(true);
   const [includesSource, setIncludesSource] = useState(true);
 
-  // License
   const [licenseType, setLicenseType] = useState<'PERSONAL' | 'COMMERCIAL'>('PERSONAL');
   const [seatCount, setSeatCount] = useState(1);
 
-  // Files
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [coverMedia, setCoverMedia] = useState<UploadedMedia | null>(null);
-  const [galleryMedia, setGalleryMedia] = useState<UploadedMedia[]>([]);
-
-  // Preview mode
   const [showPreview, setShowPreview] = useState(false);
+
+  const {
+    uploadedFiles,
+    coverMedia,
+    galleryMedia,
+    handleFileUpload,
+    removeFile,
+    handleCoverUpload,
+    removeCover,
+    handleGalleryUpload,
+    removeGalleryItem,
+    reorderGallery,
+    uploadAllFiles,
+    uploadAllMedia,
+    buildFilesPayload,
+    buildMediaPayload,
+  } = useListingUploadManager();
 
   useEffect(() => {
     if (authLoading) return;
+
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
-    checkStripeStatus();
+
+    void checkStripeStatus();
   }, [isAuthenticated, authLoading, router]);
 
   const checkStripeStatus = async () => {
@@ -155,8 +100,6 @@ export default function NewProductPage() {
       if (response.ok) {
         const data = await response.json();
         setStripeStatus(data);
-      } else {
-        console.error('Failed to check Stripe status');
       }
     } catch (error) {
       console.error('Error checking Stripe status:', error);
@@ -166,513 +109,187 @@ export default function NewProductPage() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+  const buildDraftPayload = useCallback(() => {
+    const numericPrice = Number.parseFloat(price);
+    return {
+      draftId: draftId || undefined,
+      title: title.trim() || undefined,
+      description: description.trim() || undefined,
+      category: category || undefined,
+      price: Number.isNaN(numericPrice) ? undefined : numericPrice,
+      xLightsVersionMin: xLightsVersionMin.trim() || null,
+      xLightsVersionMax: xLightsVersionMax.trim() || null,
+      targetUse: targetUse.trim() || null,
+      expectedProps: expectedProps.trim() || null,
+      includesFSEQ,
+      includesSource,
+      licenseType,
+      seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
+    };
+  }, [
+    draftId,
+    title,
+    description,
+    category,
+    price,
+    xLightsVersionMin,
+    xLightsVersionMax,
+    targetUse,
+    expectedProps,
+    includesFSEQ,
+    includesSource,
+    licenseType,
+    seatCount,
+  ]);
 
-    const newFiles: UploadedFile[] = Array.from(files).map((file) => {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      let fileType: UploadedFile['fileType'] = 'ASSET';
-
-      if (ext === 'fseq') fileType = 'RENDERED';
-      else if (ext === 'xsq' || ext === 'xml') fileType = 'SOURCE';
-      else if (['mp4', 'mov', 'webm', 'gif'].includes(ext || '')) fileType = 'PREVIEW';
-
-      return {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-        file,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType,
-      };
-    });
-
-    setUploadedFiles((prev) => [...prev, ...newFiles]);
-  };
-
-  const removeFile = (fileId: string) => {
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
-  };
-
-  const updateFileState = (fileId: string, patch: Partial<UploadedFile>) => {
-    setUploadedFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, ...patch } : f))
-    );
-  };
-
-  const updateCoverMedia = (patch: Partial<UploadedMedia>) => {
-    setCoverMedia((prev) => (prev ? { ...prev, ...patch } : prev));
-  };
-
-  const updateGalleryMedia = (fileId: string, patch: Partial<UploadedMedia>) => {
-    setGalleryMedia((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, ...patch } : f))
-    );
-  };
-
-  const uploadFileToStorage = async (uploadedFile: UploadedFile): Promise<void> => {
-    if (uploadedFile.file.size > SIMPLE_UPLOAD_MAX_SIZE) {
-      return uploadFileChunked(uploadedFile);
-    }
-
-    return uploadFileSimple(uploadedFile);
-  };
-
-  const uploadMediaToStorage = async (mediaFile: UploadedMedia): Promise<void> => {
-    if (mediaFile.file.size > SIMPLE_UPLOAD_MAX_SIZE) {
-      return uploadMediaChunked(mediaFile);
-    }
-
-    return uploadMediaSimple(mediaFile);
-  };
-
-  const uploadFileSimple = async (uploadedFile: UploadedFile): Promise<void> => {
-    const formData = new FormData();
-    formData.append('file', uploadedFile.file);
-    formData.append('fileType', uploadedFile.fileType);
-
-    try {
-      updateFileState(uploadedFile.id, { uploadProgress: 1, uploadError: undefined });
-
-      const response = await fetch('/api/upload/simple', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+  const saveDraft = useCallback(
+    async (reason: 'auto' | 'manual') => {
+      if (autosaveInFlight.current && reason === 'auto') {
+        return false;
       }
 
-      const data = await response.json();
+      const hasAnyData =
+        title.trim().length > 0 ||
+        description.trim().length > 0 ||
+        category.length > 0 ||
+        price.length > 0 ||
+        xLightsVersionMin.length > 0 ||
+        xLightsVersionMax.length > 0 ||
+        targetUse.length > 0 ||
+        expectedProps.length > 0;
 
-      // Update the file in state with upload results
-      updateFileState(uploadedFile.id, {
-        uploadedFileId: data.fileId || undefined,
-        storageKey: data.storageKey,
-        fileHash: data.fileHash,
-        mimeType: data.mimeType || uploadedFile.file.type,
-        metadata: data.metadata || undefined,
-        sequenceLength: data.sequenceLength,
-        fps: data.fps,
-        channelCount: data.channelCount,
-        uploadProgress: 100,
-        uploadError: undefined,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-
-      updateFileState(uploadedFile.id, { uploadError: errorMessage, uploadProgress: 0 });
-
-      throw error;
-    }
-  };
-
-  const uploadMediaSimple = async (mediaFile: UploadedMedia): Promise<void> => {
-    const formData = new FormData();
-    formData.append('file', mediaFile.file);
-    formData.append('fileType', mediaFile.fileType);
-
-    try {
-      if (mediaFile.mediaType === 'cover') {
-        updateCoverMedia({ uploadProgress: 1, uploadError: undefined });
-      } else {
-        updateGalleryMedia(mediaFile.id, { uploadProgress: 1, uploadError: undefined });
+      if (!hasAnyData) {
+        return true;
       }
 
-      const response = await fetch('/api/upload/simple', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to upload media');
-      }
-
-      const patch = {
-        storageKey: data.storageKey,
-        fileHash: data.fileHash,
-        mimeType: data.mimeType || mediaFile.file.type,
-        uploadProgress: 100,
-        uploadError: undefined,
-      };
-
-      if (mediaFile.mediaType === 'cover') {
-        updateCoverMedia(patch);
-      } else {
-        updateGalleryMedia(mediaFile.id, patch);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      if (mediaFile.mediaType === 'cover') {
-        updateCoverMedia({ uploadError: errorMessage, uploadProgress: 0 });
-      } else {
-        updateGalleryMedia(mediaFile.id, { uploadError: errorMessage, uploadProgress: 0 });
-      }
-    }
-  };
-
-  const uploadFileChunked = async (uploadedFile: UploadedFile): Promise<void> => {
-    try {
-      updateFileState(uploadedFile.id, { uploadProgress: 1, uploadError: undefined });
-
-      const initResponse = await fetch('/api/upload/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: uploadedFile.file.name,
-          fileSize: uploadedFile.file.size,
-          mimeType: uploadedFile.file.type || 'application/octet-stream',
-          uploadType: uploadedFile.fileType,
-        }),
-      });
-
-      if (!initResponse.ok) {
-        const error = await initResponse.json();
-        throw new Error(error.error || 'Failed to initiate upload');
-      }
-
-      const initData = await initResponse.json();
-      const totalChunks = initData.totalChunks as number;
-      const chunkSize = typeof initData.chunkSize === 'number' ? initData.chunkSize : CHUNK_SIZE;
-      const uploadId = initData.uploadId as string;
-
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
-        const start = chunkIndex * chunkSize;
-        const end = Math.min(start + chunkSize, uploadedFile.file.size);
-        const chunk = uploadedFile.file.slice(start, end);
-        const chunkBuffer = await chunk.arrayBuffer();
-
-        const chunkHash = CryptoJS.MD5(
-          CryptoJS.lib.WordArray.create(chunkBuffer as ArrayBuffer)
-        ).toString();
-
-        const chunkForm = new FormData();
-        chunkForm.append('uploadId', uploadId);
-        chunkForm.append('chunkIndex', String(chunkIndex));
-        chunkForm.append('chunkHash', chunkHash);
-        chunkForm.append('chunk', new File([chunk], uploadedFile.file.name));
-
-        const chunkResponse = await fetch('/api/upload/chunk', {
-          method: 'POST',
-          body: chunkForm,
-        });
-
-        if (!chunkResponse.ok) {
-          const error = await chunkResponse.json();
-          throw new Error(error.error || `Failed to upload chunk ${chunkIndex + 1}`);
-        }
-
-        const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-        updateFileState(uploadedFile.id, { uploadProgress: progress });
-      }
-
-      const completeResponse = await fetch('/api/upload/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploadId }),
-      });
-
-      if (!completeResponse.ok) {
-        const error = await completeResponse.json();
-        throw new Error(error.error || 'Failed to complete upload');
-      }
-
-      const data = await completeResponse.json();
-
-      updateFileState(uploadedFile.id, {
-        uploadedFileId: data.fileId || undefined,
-        storageKey: data.storageKey,
-        fileHash: data.fileHash,
-        mimeType: data.mimeType || uploadedFile.file.type,
-        metadata: data.metadata || undefined,
-        sequenceLength: data.sequenceLength,
-        fps: data.fps,
-        channelCount: data.channelCount,
-        uploadProgress: 100,
-        uploadError: undefined,
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      updateFileState(uploadedFile.id, { uploadError: errorMessage, uploadProgress: 0 });
-      throw error;
-    }
-  };
-
-  const uploadMediaChunked = async (mediaFile: UploadedMedia): Promise<void> => {
-    try {
-      if (mediaFile.mediaType === 'cover') {
-        updateCoverMedia({ uploadProgress: 1, uploadError: undefined });
-      } else {
-        updateGalleryMedia(mediaFile.id, { uploadProgress: 1, uploadError: undefined });
-      }
-
-      const initResponse = await fetch('/api/upload/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: mediaFile.file.name,
-          fileSize: mediaFile.file.size,
-          mimeType: mediaFile.file.type || 'application/octet-stream',
-          uploadType: mediaFile.fileType,
-        }),
-      });
-
-      const initData = await initResponse.json();
-      if (!initResponse.ok) {
-        throw new Error(initData.error || 'Failed to initiate upload');
-      }
-
-      const uploadId = initData.uploadId as string;
-      const chunkSize = initData.chunkSize as number;
-      const totalChunks = initData.totalChunks as number;
-
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-        const start = chunkIndex * chunkSize;
-        const end = Math.min(start + chunkSize, mediaFile.file.size);
-        const chunk = mediaFile.file.slice(start, end);
-        const chunkBuffer = Buffer.from(await chunk.arrayBuffer());
-        const chunkHash = CryptoJS.MD5(CryptoJS.lib.WordArray.create(chunkBuffer)).toString();
-
-        const chunkForm = new FormData();
-        chunkForm.append('uploadId', uploadId);
-        chunkForm.append('chunkIndex', chunkIndex.toString());
-        chunkForm.append('chunkHash', chunkHash);
-        chunkForm.append('chunk', new File([chunk], mediaFile.file.name));
-
-        const chunkResponse = await fetch('/api/upload/chunk', {
-          method: 'POST',
-          body: chunkForm,
-        });
-
-        if (!chunkResponse.ok) {
-          const error = await chunkResponse.json();
-          throw new Error(error.error || `Failed to upload chunk ${chunkIndex + 1}`);
-        }
-
-        const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-        if (mediaFile.mediaType === 'cover') {
-          updateCoverMedia({ uploadProgress: progress });
-        } else {
-          updateGalleryMedia(mediaFile.id, { uploadProgress: progress });
-        }
-      }
-
-      const completeResponse = await fetch('/api/upload/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uploadId }),
-      });
-
-      const data = await completeResponse.json();
-      if (!completeResponse.ok) {
-        throw new Error(data.error || 'Failed to complete upload');
-      }
-
-      const patch = {
-        storageKey: data.storageKey,
-        fileHash: data.fileHash,
-        mimeType: data.mimeType || mediaFile.file.type,
-        uploadProgress: 100,
-        uploadError: undefined,
-      };
-
-      if (mediaFile.mediaType === 'cover') {
-        updateCoverMedia(patch);
-      } else {
-        updateGalleryMedia(mediaFile.id, patch);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      if (mediaFile.mediaType === 'cover') {
-        updateCoverMedia({ uploadError: errorMessage, uploadProgress: 0 });
-      } else {
-        updateGalleryMedia(mediaFile.id, { uploadError: errorMessage, uploadProgress: 0 });
-      }
-    }
-  };
-
-  const uploadAllFiles = async (): Promise<boolean> => {
-    if (uploadedFiles.length === 0) return true;
-
-    const filesToUpload = uploadedFiles.filter((f) => !f.storageKey || !f.fileHash);
-    if (filesToUpload.length === 0) return true;
-
-    let uploadsFailed = false;
-
-    // Upload files sequentially with progress tracking
-    for (let i = 0; i < filesToUpload.length; i++) {
-      const file = filesToUpload[i];
+      autosaveInFlight.current = true;
+      setAutosaveState('saving');
+      setAutosaveMessage(reason === 'manual' ? 'Saving draft...' : 'Autosaving draft...');
 
       try {
-        // Set progress to show upload starting
-        setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === file.id ? { ...f, uploadProgress: 1 } : f))
-        );
+        const response = await fetch('/api/dashboard/products/draft', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(buildDraftPayload()),
+        });
 
-        await uploadFileToStorage(file);
-
-        toast.success(`Uploaded ${file.fileName}`);
-      } catch (error) {
-        uploadsFailed = true;
-        toast.error(`Failed to upload ${file.fileName}`);
-        console.error(`Upload error for ${file.fileName}:`, error);
-      }
-    }
-
-    return !uploadsFailed;
-  };
-
-  const uploadAllMedia = async (): Promise<boolean> => {
-    const mediaItems = [
-      ...(coverMedia ? [coverMedia] : []),
-      ...galleryMedia,
-    ].filter((item) => !item.storageKey || !item.fileHash);
-
-    if (mediaItems.length === 0) return true;
-
-    let uploadsFailed = false;
-
-    for (const mediaFile of mediaItems) {
-      try {
-        if (mediaFile.mediaType === 'cover') {
-          updateCoverMedia({ uploadProgress: 1 });
-        } else {
-          updateGalleryMedia(mediaFile.id, { uploadProgress: 1 });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.error?.message || payload?.error || 'Failed to save draft');
         }
-        await uploadMediaToStorage(mediaFile);
+
+        if (payload?.draftId) {
+          setDraftId(payload.draftId);
+        }
+
+        setAutosaveState('saved');
+        setAutosaveMessage('Draft saved');
+        if (reason === 'manual') {
+          toast.success('Draft saved');
+        }
+
+        return true;
       } catch (error) {
-        uploadsFailed = true;
-        toast.error(`Failed to upload ${mediaFile.fileName}`);
+        const message = error instanceof Error ? error.message : 'Failed to save draft';
+        setAutosaveState('error');
+        setAutosaveMessage(message);
+        if (reason === 'manual') {
+          toast.error(message);
+        }
+        return false;
+      } finally {
+        autosaveInFlight.current = false;
       }
+    },
+    [
+      title,
+      description,
+      category,
+      price,
+      xLightsVersionMin,
+      xLightsVersionMax,
+      targetUse,
+      expectedProps,
+      buildDraftPayload,
+    ]
+  );
+
+  useEffect(() => {
+    if (isLoading || authLoading || !isAuthenticated) {
+      return;
     }
 
-    return !uploadsFailed;
-  };
+    const timeoutId = setTimeout(() => {
+      void saveDraft('auto');
+    }, 2000);
 
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    return () => clearTimeout(timeoutId);
+  }, [
+    isLoading,
+    authLoading,
+    isAuthenticated,
+    title,
+    description,
+    category,
+    price,
+    xLightsVersionMin,
+    xLightsVersionMax,
+    targetUse,
+    expectedProps,
+    includesFSEQ,
+    includesSource,
+    licenseType,
+    seatCount,
+    saveDraft,
+  ]);
 
-    setCoverMedia({
-      id: `${Date.now()}-cover`,
-      file,
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: 'PREVIEW',
-      mediaType: 'cover',
+  const handleSave = async (publish: boolean) => {
+    if (!publish) {
+      await saveDraft('manual');
+      return;
+    }
+
+    const publishReadiness = computePublishReadiness({
+      title,
+      description,
+      category,
+      price,
+      includesFSEQ,
+      includesSource,
+      uploadedFiles,
+      stripeReady: Boolean(stripeStatus?.canReceivePayments),
     });
-  };
 
-  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    const newItems: UploadedMedia[] = Array.from(files).map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-      file,
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: 'PREVIEW',
-      mediaType: 'gallery',
-    }));
-
-    setGalleryMedia((prev) => [...prev, ...newItems]);
-  };
-
-  const removeGalleryItem = (fileId: string) => {
-    setGalleryMedia((prev) => prev.filter((item) => item.id !== fileId));
-  };
-
-  const handleSave = async (publish: boolean = false) => {
-    // Check Stripe account first
-    if (publish && !stripeStatus?.canReceivePayments) {
-      toast.error('Please connect your Stripe account before publishing products');
-      return;
-    }
-
-    const hasRenderedFile = uploadedFiles.some((file) => file.fileType === 'RENDERED');
-    const hasSourceFile = uploadedFiles.some((file) => file.fileType === 'SOURCE');
-
-    if (!title.trim()) {
-      toast.error('Title is required');
-      return;
-    }
-
-    if (!description.trim()) {
-      toast.error('Description is required');
-      return;
-    }
-
-    if (!category) {
-      toast.error('Category is required');
-      return;
-    }
-
-    if (price === '' || parseFloat(price) < 0) {
-      toast.error('Valid price is required');
-      return;
-    }
-
-    if (includesFSEQ && !hasRenderedFile) {
-      toast.error('You enabled FSEQ but did not upload any .fseq files');
-      return;
-    }
-
-    if (!includesFSEQ && hasRenderedFile) {
-      toast.error('You uploaded a .fseq file. Enable FSEQ or remove the file.');
-      return;
-    }
-
-    if (includesSource && !hasSourceFile) {
-      toast.error('You enabled Source but did not upload any .xsq/.xml files');
-      return;
-    }
-
-    if (!includesSource && hasSourceFile) {
-      toast.error('You uploaded a source file. Enable Source or remove the file.');
-      return;
-    }
-
-    if (!includesFSEQ && !includesSource && uploadedFiles.length === 0) {
-      toast.error('Please add at least one file or enable file types');
+    if (!publishReadiness.ready) {
+      toast.error(publishReadiness.blockers[0] || 'Listing is not ready to publish');
       return;
     }
 
     try {
       setIsSaving(true);
-      setIsPublishing(publish);
+      setIsPublishing(true);
 
-      // Step 1: Upload all files to storage first
-      if (uploadedFiles.length > 0) {
-        toast.info(`Uploading ${uploadedFiles.length} file(s)...`);
-        const uploadSuccess = await uploadAllFiles();
-
-        if (!uploadSuccess) {
-          toast.error('Some files failed to upload. Please try again.');
-          return;
-        }
+      const filesUploaded = await uploadAllFiles();
+      if (!filesUploaded) {
+        return;
       }
 
-      if ((coverMedia || galleryMedia.length > 0)) {
-        const mediaSuccess = await uploadAllMedia();
-        if (!mediaSuccess) {
-          toast.error('Some media failed to upload. Please try again.');
-          return;
-        }
+      const mediaUploaded = await uploadAllMedia();
+      if (!mediaUploaded) {
+        return;
       }
 
-      // Step 2: Create product with uploaded file IDs
       const response = await fetch('/api/dashboard/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          draftId: draftId || undefined,
           title,
           description,
           category,
-          price: parseFloat(price),
+          price: Number.parseFloat(price),
           xLightsVersionMin,
           xLightsVersionMax,
           targetUse,
@@ -681,87 +298,44 @@ export default function NewProductPage() {
           includesSource,
           licenseType,
           seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
-          status: publish ? 'PUBLISHED' : 'DRAFT',
-          files: uploadedFiles
-            .filter((f) => f.storageKey && f.fileHash)
-            .map((f) => ({
-            fileId: f.uploadedFileId,
-            fileName: f.fileName,
-            originalName: f.file.name,
-            fileType: f.fileType,
-            fileSize: f.fileSize,
-            storageKey: f.storageKey,
-            fileHash: f.fileHash,
-            mimeType: f.mimeType,
-            metadata: f.metadata,
-            sequenceLength: f.sequenceLength,
-            fps: f.fps,
-            channelCount: f.channelCount,
-          })),
-          media: [
-            ...(coverMedia && coverMedia.storageKey && coverMedia.fileHash
-              ? [{
-                  fileName: coverMedia.fileName,
-                  originalName: coverMedia.file.name,
-                  fileSize: coverMedia.fileSize,
-                  storageKey: coverMedia.storageKey,
-                  fileHash: coverMedia.fileHash,
-                  mimeType: coverMedia.mimeType,
-                  mediaType: 'cover',
-                  displayOrder: 0,
-                }]
-              : []),
-            ...galleryMedia
-              .filter((m) => m.storageKey && m.fileHash)
-              .map((m, index) => ({
-                fileName: m.fileName,
-                originalName: m.file.name,
-                fileSize: m.fileSize,
-                storageKey: m.storageKey,
-                fileHash: m.fileHash,
-                mimeType: m.mimeType,
-                mediaType: m.mediaType,
-                displayOrder: index + 1,
-              })),
-          ],
+          status: 'PUBLISHED',
+          files: buildFilesPayload(),
+          media: buildMediaPayload(),
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(
-          publish
-            ? 'Product published successfully!'
-            : 'Product saved as draft'
-        );
-        router.push('/dashboard/products');
-      } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to save product');
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error?.error?.message || error?.error || 'Failed to publish listing');
       }
+
+      toast.success('Product published successfully');
+      router.push('/dashboard/products');
     } catch (error) {
-      console.error('Error saving product:', error);
-      toast.error('Failed to save product');
+      const message = error instanceof Error ? error.message : 'Failed to publish listing';
+      toast.error(message);
     } finally {
       setIsSaving(false);
       setIsPublishing(false);
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
+  const readiness = useMemo(
+    () =>
+      computePublishReadiness({
+        title,
+        description,
+        category,
+        price,
+        includesFSEQ,
+        includesSource,
+        uploadedFiles,
+        stripeReady: Boolean(stripeStatus?.canReceivePayments),
+      }),
+    [title, description, category, price, includesFSEQ, includesSource, uploadedFiles, stripeStatus]
+  );
 
-  const getLicenseTypeLabel = () => {
-    if (licenseType === 'PERSONAL') return 'Personal Use';
-    return `Commercial Use (${seatCount} seat${seatCount > 1 ? 's' : ''})`;
-  };
-
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">Loading...</div>
@@ -786,883 +360,141 @@ export default function NewProductPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div>
               <h1 className="text-3xl font-bold">New Product</h1>
-              <p className="text-muted-foreground">Create a new sequence listing.</p>
+              <p className="text-muted-foreground">Create and publish a new sequence listing.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {autosaveState === 'saving' ? 'Autosaving…' : autosaveMessage || 'Autosave idle'}
+              </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push('/dashboard/products')}
-              >
-                Back to Products
+              <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/products')}>
+                Back to Listings
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPreview(!showPreview)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setShowPreview((previous) => !previous)}>
                 <Eye className="h-4 w-4 mr-2" />
                 {showPreview ? 'Edit' : 'Preview'}
               </Button>
             </div>
           </div>
-          {/* Stripe Account Requirement Banner */}
-          {!stripeLoading && stripeStatus && !stripeStatus.canReceivePayments && (
+
+          {!stripeLoading && stripeStatus && !stripeStatus.canReceivePayments ? (
             <Alert
               className={`mb-6 ${
-                stripeStatus.stripeConfigured === false ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-red-500 bg-red-50 text-red-900'
+                stripeStatus.stripeConfigured === false
+                  ? 'border-amber-500 bg-amber-50 text-amber-900'
+                  : 'border-red-500 bg-red-50 text-red-900'
               }`}
             >
               <AlertCircle className="h-5 w-5" />
-              <AlertTitle className="text-lg font-semibold">
+              <AlertTitle>
                 {stripeStatus.stripeConfigured === false
                   ? 'Stripe Connect Not Configured'
                   : 'Stripe Account Required'}
               </AlertTitle>
-              <AlertDescription className="mt-2">
-                {stripeStatus.stripeConfigured === false ? (
-                  <>
-                    <p className="mb-3">
-                      {stripeStatus.message || 'Stripe Connect is not configured for this environment yet.'}
-                    </p>
-                    <p className="text-sm">
-                      Set `STRIPE_SECRET_KEY` (and `NEXT_PUBLIC_BASE_URL`) in your environment, then refresh.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="mb-3">
-                      You need to connect your Stripe account before you can sell products on SequenceHUB.
-                      This is required to receive payments from buyers.
-                    </p>
-                    {stripeStatus.stripeError && (
-                      <p className="mb-3 text-sm">
-                        {stripeStatus.stripeError}
-                      </p>
-                    )}
-                    <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="bg-white hover:bg-gray-50"
-                        onClick={() => router.push('/dashboard/creator/onboarding')}
-                      >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Set Up Stripe Account
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-white hover:bg-white/10"
-                        onClick={checkStripeStatus}
-                      >
-                        Refresh Status
-                      </Button>
-                    </div>
-                  </>
-                )}
+              <AlertDescription>
+                <p className="mb-3">
+                  {stripeStatus.stripeConfigured === false
+                    ? stripeStatus.message || 'Stripe Connect is not configured for this environment.'
+                    : stripeStatus.stripeError ||
+                      'You need to complete Stripe onboarding before publishing products.'}
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/creator/onboarding')}>
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Set Up Stripe
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={checkStripeStatus}>
+                    Refresh
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
-          )}
+          ) : null}
 
           {showPreview ? (
-            /* Preview Mode */
-            <Card>
-              <CardHeader>
-                <CardTitle>Product Preview</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Preview Content */}
-                <div className="space-y-4">
-                  <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
-                    <Package className="h-24 w-24 text-muted-foreground" />
-                  </div>
-
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <Badge variant="secondary">{category || 'No Category'}</Badge>
-                      <div className="flex gap-2">
-                        {includesFSEQ && <Badge variant="outline">FSEQ</Badge>}
-                        {includesSource && <Badge variant="outline">Source</Badge>}
-                      </div>
-                    </div>
-                    <h2 className="text-2xl font-bold">{title || 'Untitled'}</h2>
-                    <p className="text-muted-foreground">{description || 'No description'}</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="font-semibold mb-2">Price</h3>
-                      <p className="text-2xl font-bold">
-                        {price === '' ? '$0.00' : `$${parseFloat(price).toFixed(2)}`}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-2">License</h3>
-                      <p className="text-lg">{getLicenseTypeLabel()}</p>
-                    </div>
-                  </div>
-
-                  {xLightsVersionMin && (
-                    <div>
-                      <h3 className="font-semibold mb-2">xLights Compatibility</h3>
-                      <p className="text-sm text-muted-foreground">
-                        xLights {xLightsVersionMin}
-                        {xLightsVersionMax && ` - ${xLightsVersionMax}`}
-                      </p>
-                    </div>
-                  )}
-
-                  {targetUse && (
-                    <div>
-                      <h3 className="font-semibold mb-2">Target Use</h3>
-                      <p className="text-sm text-muted-foreground">{targetUse}</p>
-                    </div>
-                  )}
-
-                  {expectedProps && (
-                    <div>
-                      <h3 className="font-semibold mb-2">Expected Props</h3>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {expectedProps}
-                      </p>
-                    </div>
-                  )}
-
-                  {uploadedFiles.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold mb-2">Included Files</h3>
-                      <div className="space-y-2">
-                        {uploadedFiles.map((file) => (
-                          <div key={file.id} className="flex items-center justify-between p-3 border rounded">
-                            <div className="flex items-center gap-2">
-                              <Package className="h-4 w-4 text-muted-foreground" />
-                              <span>{file.fileName}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {file.fileType}
-                              </Badge>
-                            </div>
-                            <span className="text-sm text-muted-foreground">
-                              {formatFileSize(file.fileSize)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <Separator />
-
-                <div className="flex justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowPreview(false)}
-                  >
-                    Back to Edit
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => handleSave(false)}
-                      disabled={isSaving}
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {isSaving ? 'Saving...' : 'Save Draft'}
-                    </Button>
-                    <Button
-                      onClick={() => handleSave(true)}
-                      disabled={isSaving || !stripeStatus?.canReceivePayments}
-                    >
-                      <Package className="h-4 w-4 mr-2" />
-                      {isPublishing ? 'Publishing...' : 'Publish'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <ListingPreviewPane
+              title={title}
+              description={description}
+              category={category}
+              price={price}
+              licenseType={licenseType}
+              seatCount={seatCount}
+              includesFSEQ={includesFSEQ}
+              includesSource={includesSource}
+              xLightsVersionMin={xLightsVersionMin}
+              xLightsVersionMax={xLightsVersionMax}
+              targetUse={targetUse}
+              expectedProps={expectedProps}
+              uploadedFiles={uploadedFiles}
+              isSaving={isSaving}
+              isPublishing={isPublishing}
+              stripeReady={Boolean(stripeStatus?.canReceivePayments)}
+              onBackToEdit={() => setShowPreview(false)}
+              onSaveDraft={() => void handleSave(false)}
+              onPublish={() => void handleSave(true)}
+            />
           ) : (
-            /* Edit Mode */
-            <Tabs defaultValue="basic" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-7">
-                <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                <TabsTrigger value="files">Files</TabsTrigger>
-                <TabsTrigger value="media">Media</TabsTrigger>
-                <TabsTrigger value="metadata">xLights</TabsTrigger>
-                <TabsTrigger value="pricing">Pricing</TabsTrigger>
-                <TabsTrigger value="license">License</TabsTrigger>
-                <TabsTrigger value="review">Review</TabsTrigger>
-              </TabsList>
+            <ListingFormTabs
+              activeTab={activeTab}
+              onTabChange={(value) => {
+                setActiveTab(value);
+                void saveDraft('auto');
+              }}
+              title={title}
+              onTitleChange={setTitle}
+              description={description}
+              onDescriptionChange={setDescription}
+              category={category}
+              onCategoryChange={setCategory}
+              xLightsVersionMin={xLightsVersionMin}
+              onXLightsVersionMinChange={setXLightsVersionMin}
+              xLightsVersionMax={xLightsVersionMax}
+              onXLightsVersionMaxChange={setXLightsVersionMax}
+              targetUse={targetUse}
+              onTargetUseChange={setTargetUse}
+              expectedProps={expectedProps}
+              onExpectedPropsChange={setExpectedProps}
+              price={price}
+              onPriceChange={setPrice}
+              includesFSEQ={includesFSEQ}
+              onIncludesFSEQChange={setIncludesFSEQ}
+              includesSource={includesSource}
+              onIncludesSourceChange={setIncludesSource}
+              licenseType={licenseType}
+              onLicenseTypeChange={setLicenseType}
+              seatCount={seatCount}
+              onSeatCountChange={setSeatCount}
+              uploadedFiles={uploadedFiles}
+              onFileUpload={handleFileUpload}
+              onRemoveFile={removeFile}
+              coverMedia={coverMedia}
+              onCoverUpload={handleCoverUpload}
+              onRemoveCover={removeCover}
+              galleryMedia={galleryMedia}
+              onGalleryUpload={handleGalleryUpload}
+              onRemoveGalleryItem={removeGalleryItem}
+              onGalleryReorder={(items) => {
+                reorderGallery(items);
+                void saveDraft('auto');
+              }}
+              stripeLoading={stripeLoading}
+              stripeStatus={stripeStatus}
+              onOpenStripeOnboarding={() => router.push('/dashboard/creator/onboarding')}
+              onRefreshStripeStatus={checkStripeStatus}
+              onSaveDraft={() => void handleSave(false)}
+              onPublish={() => void handleSave(true)}
+              isSaving={isSaving}
+              isPublishing={isPublishing}
+              readiness={readiness}
+            />
+          )}
 
-              {/* Basic Info Tab */}
-              <TabsContent value="basic" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Basic Information</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="title">Product Title *</Label>
-                      <Input
-                        id="title"
-                        placeholder="e.g., Christmas Tree Twinkle Sequence"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description *</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Describe your sequence. What makes it special? What props are needed?"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={6}
-                        required
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        Supports Markdown. Be detailed to help buyers understand what they're getting.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="category">Category *</Label>
-                      <Select value={category} onValueChange={setCategory}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CATEGORIES.map((cat) => (
-                            <SelectItem key={cat.value} value={cat.value}>
-                              {cat.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Files Tab */}
-              <TabsContent value="files" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Product Files</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <Label>File Types Included</Label>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between p-3 border rounded">
-                          <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
-                              FSEQ
-                            </div>
-                            <span className="text-sm">
-                              Rendered playback file (.fseq)
-                            </span>
-                          </div>
-                          <Switch
-                            checked={includesFSEQ}
-                            onCheckedChange={setIncludesFSEQ}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 border rounded">
-                          <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
-                              SRC
-                            </div>
-                            <span className="text-sm">
-                              Source project file (.xsq, .xml)
-                            </span>
-                          </div>
-                          <Switch
-                            checked={includesSource}
-                            onCheckedChange={setIncludesSource}
-                          />
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      <div className="space-y-2">
-                        <Label htmlFor="file-upload">Upload Files</Label>
-                        <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                          <input
-                            id="file-upload"
-                            type="file"
-                            multiple
-                            onChange={handleFileUpload}
-                            className="hidden"
-                            accept=".fseq,.xsq,.xml,.mp4,.mov,.webm,.gif,.png,.jpg,.jpeg,.mp3,.wav,.ogg,.xmodel"
-                          />
-                          <label
-                            htmlFor="file-upload"
-                            className="cursor-pointer block"
-                          >
-                            <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                            <p className="text-lg font-semibold mb-2">
-                              Click to upload or drag files here
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Supports: .fseq, .xsq, .xml, .mp4, .mov, .webm, .gif, .png, .jpg, .jpeg, .mp3, .wav, .ogg, .xmodel
-                            </p>
-                          </label>
-                        </div>
-                      </div>
-
-                      {uploadedFiles.length > 0 && (
-                        <div className="space-y-2">
-                          <Label>Uploaded Files</Label>
-                          <div className="space-y-2">
-                            {uploadedFiles.map((file) => (
-                              <div
-                                key={file.id}
-                                className="flex items-center justify-between p-3 border rounded"
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  {file.uploadProgress !== undefined && file.uploadProgress > 0 ? (
-                                    file.uploadProgress === 100 ? (
-                                      <Check className="h-5 w-5 text-green-600" />
-                                    ) : (
-                                      <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                    )
-                                  ) : file.uploadError ? (
-                                    <X className="h-5 w-5 text-destructive" />
-                                  ) : (
-                                    <Package className="h-5 w-5 text-muted-foreground" />
-                                  )}
-                                  <div className="flex-1">
-                                    <div className="font-medium">{file.fileName}</div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {file.uploadError ? (
-                                        <span className="text-destructive">{file.uploadError}</span>
-                                      ) : file.uploadProgress === 100 ? (
-                                        <span className="text-green-600">✓ Uploaded successfully</span>
-                                      ) : file.uploadProgress !== undefined && file.uploadProgress > 0 ? (
-                                        <span>Uploading...</span>
-                                      ) : (
-                                        formatFileSize(file.fileSize)
-                                      )}
-                                    </div>
-                                  </div>
-                                  <Badge variant="outline" className="text-xs">
-                                    {file.fileType}
-                                  </Badge>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeFile(file.id)}
-                                  disabled={file.uploadProgress !== undefined && file.uploadProgress > 0 && file.uploadProgress < 100}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!includesFSEQ && !includesSource && uploadedFiles.length === 0 && (
-                        <div className="flex items-start gap-2 p-3 bg-muted rounded">
-                          <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                          <p className="text-sm">
-                            Add files or enable at least one file type (FSEQ or Source)
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Media Tab */}
-              <TabsContent value="media" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Product Media</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="cover-upload">Cover Image / Video</Label>
-                      <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                        <input
-                          id="cover-upload"
-                          type="file"
-                          onChange={handleCoverUpload}
-                          className="hidden"
-                          accept=".png,.jpg,.jpeg,.webp,.gif,.mp4,.mov,.webm"
-                        />
-                        <label htmlFor="cover-upload" className="cursor-pointer block">
-                          <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                          <p className="text-sm font-semibold">Upload a cover image or short preview</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Supported: .png, .jpg, .jpeg, .webp, .gif, .mp4, .mov, .webm
-                          </p>
-                        </label>
-                      </div>
-
-                      {coverMedia && (
-                        <div className="flex items-center justify-between p-3 border rounded">
-                          <div className="flex items-center gap-3 flex-1">
-                            {coverMedia.uploadProgress && coverMedia.uploadProgress > 0 ? (
-                              coverMedia.uploadProgress === 100 ? (
-                                <Check className="h-5 w-5 text-green-600" />
-                              ) : (
-                                <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                              )
-                            ) : coverMedia.uploadError ? (
-                              <X className="h-5 w-5 text-destructive" />
-                            ) : (
-                              <Package className="h-5 w-5 text-muted-foreground" />
-                            )}
-                            <div className="flex-1">
-                              <div className="font-medium">{coverMedia.fileName}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {coverMedia.uploadError ? (
-                                  <span className="text-destructive">{coverMedia.uploadError}</span>
-                                ) : coverMedia.uploadProgress === 100 ? (
-                                  <span className="text-green-600">✓ Uploaded successfully</span>
-                                ) : coverMedia.uploadProgress ? (
-                                  <span>Uploading...</span>
-                                ) : (
-                                  formatFileSize(coverMedia.fileSize)
-                                )}
-                              </div>
-                            </div>
-                            <Badge variant="outline" className="text-xs">Cover</Badge>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setCoverMedia(null)}
-                            disabled={coverMedia.uploadProgress !== undefined && coverMedia.uploadProgress > 0 && coverMedia.uploadProgress < 100}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                      <Label htmlFor="gallery-upload">Gallery Images</Label>
-                      <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                        <input
-                          id="gallery-upload"
-                          type="file"
-                          multiple
-                          onChange={handleGalleryUpload}
-                          className="hidden"
-                          accept=".png,.jpg,.jpeg,.webp,.gif"
-                        />
-                        <label htmlFor="gallery-upload" className="cursor-pointer block">
-                          <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                          <p className="text-sm font-semibold">Upload gallery images</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Supported: .png, .jpg, .jpeg, .webp, .gif
-                          </p>
-                        </label>
-                      </div>
-
-                      {galleryMedia.length > 0 && (
-                        <div className="space-y-2">
-                          <Label>Gallery Items</Label>
-                          <div className="space-y-2">
-                            {galleryMedia.map((item) => (
-                              <div
-                                key={item.id}
-                                className="flex items-center justify-between p-3 border rounded"
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  {item.uploadProgress && item.uploadProgress > 0 ? (
-                                    item.uploadProgress === 100 ? (
-                                      <Check className="h-5 w-5 text-green-600" />
-                                    ) : (
-                                      <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                    )
-                                  ) : item.uploadError ? (
-                                    <X className="h-5 w-5 text-destructive" />
-                                  ) : (
-                                    <Package className="h-5 w-5 text-muted-foreground" />
-                                  )}
-                                  <div className="flex-1">
-                                    <div className="font-medium">{item.fileName}</div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {item.uploadError ? (
-                                        <span className="text-destructive">{item.uploadError}</span>
-                                      ) : item.uploadProgress === 100 ? (
-                                        <span className="text-green-600">✓ Uploaded successfully</span>
-                                      ) : item.uploadProgress ? (
-                                        <span>Uploading...</span>
-                                      ) : (
-                                        formatFileSize(item.fileSize)
-                                      )}
-                                    </div>
-                                  </div>
-                                  <Badge variant="outline" className="text-xs">Gallery</Badge>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeGalleryItem(item.id)}
-                                  disabled={item.uploadProgress !== undefined && item.uploadProgress > 0 && item.uploadProgress < 100}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* xLights Metadata Tab */}
-              <TabsContent value="metadata" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>xLights Compatibility & Metadata</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="targetUse">Target Use (Optional)</Label>
-                      <Input
-                        id="targetUse"
-                        placeholder="e.g., Pixel Tree, Mega Tree, Arches, Matrix"
-                        value={targetUse}
-                        onChange={(e) => setTargetUse(e.target.value)}
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        Describe what type of display this sequence is designed for.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="xlightsMin">Min xLights Version</Label>
-                        <Input
-                          id="xlightsMin"
-                          placeholder="e.g., 2023.1"
-                          value={xLightsVersionMin}
-                          onChange={(e) => setXLightsVersionMin(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="xlightsMax">Max xLights Version</Label>
-                        <Input
-                          id="xlightsMax"
-                          placeholder="e.g., 2024.0"
-                          value={xLightsVersionMax}
-                          onChange={(e) => setXLightsVersionMax(e.target.value)}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="expectedProps">Expected Props / Models (Optional)</Label>
-                      <Textarea
-                        id="expectedProps"
-                        placeholder="e.g., 24x50 Pixel Tree, 8 Arches with 50 pixels each"
-                        value={expectedProps}
-                        onChange={(e) => setExpectedProps(e.target.value)}
-                        rows={4}
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        Help buyers understand what hardware is required to use this sequence.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Pricing Tab */}
-              <TabsContent value="pricing" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Pricing</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="price">Price (USD) *</Label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                        <Input
-                          id="price"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="0.00"
-                          className="pl-10 text-lg"
-                          value={price}
-                          onChange={(e) => setPrice(e.target.value)}
-                          required
-                        />
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Set to 0 for free products. Platform fee will be deducted from paid products.
-                      </p>
-                    </div>
-
-                    <div className="bg-muted p-4 rounded">
-                      <div className="flex items-start gap-2">
-                        <Check className="h-5 w-5 text-green-600 mt-0.5" />
-                        <div className="text-sm">
-                          <p className="font-semibold">Dynamic Pricing Tips:</p>
-                          <ul className="mt-2 space-y-1 list-disc list-inside text-muted-foreground">
-                            <li>Research similar products for pricing</li>
-                            <li>Consider the complexity and length</li>
-                            <li>Offer competitive pricing for new products</li>
-                            <li>Update pricing over time based on feedback</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* License Tab */}
-              <TabsContent value="license" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>License Type</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-4">
-                      <Label>Choose License Type:</Label>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div
-                          className={`p-4 border-2 rounded cursor-pointer transition-all ${
-                            licenseType === 'PERSONAL'
-                              ? 'border-primary bg-primary/10'
-                              : 'border-muted'
-                          }`}
-                          onClick={() => setLicenseType('PERSONAL')}
-                        >
-                          <div className="font-semibold mb-2">Personal Use</div>
-                          <p className="text-sm text-muted-foreground">
-                            For individual use on personal light shows
-                          </p>
-                        </div>
-                        <div
-                          className={`p-4 border-2 rounded cursor-pointer transition-all ${
-                            licenseType === 'COMMERCIAL'
-                              ? 'border-primary bg-primary/10'
-                              : 'border-muted'
-                          }`}
-                          onClick={() => setLicenseType('COMMERCIAL')}
-                        >
-                          <div className="font-semibold mb-2">Commercial Use</div>
-                          <p className="text-sm text-muted-foreground">
-                            For commercial installations, events, or clients
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {licenseType === 'COMMERCIAL' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="seatCount">Number of Seats/Licenses *</Label>
-                        <Input
-                          id="seatCount"
-                          type="number"
-                          min="1"
-                          value={seatCount}
-                          onChange={(e) => setSeatCount(parseInt(e.target.value) || 1)}
-                        />
-                        <p className="text-sm text-muted-foreground">
-                          How many installations is this license valid for? Each seat allows one
-                          buyer to use the sequence.
-                        </p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Review Tab */}
-              <TabsContent value="review" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Review & Publish</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Summary */}
-                    <div className="space-y-4">
-                      <div>
-                        <h3 className="font-semibold mb-3">Product Summary</h3>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Title:</span>
-                            <span className="font-medium">{title || 'Untitled'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Category:</span>
-                            <span className="font-medium">{category || 'Not set'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Price:</span>
-                            <span className="font-medium">
-                              {price === '' ? '$0.00' : `$${parseFloat(price).toFixed(2)}`}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">License:</span>
-                            <span className="font-medium">{getLicenseTypeLabel()}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <Separator />
-
-                      {/* Files Summary */}
-                      <div>
-                        <h3 className="font-semibold mb-3">Files Included</h3>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">FSEQ:</span>
-                            <span className="font-medium">
-                              {includesFSEQ ? (
-                                <span className="text-green-600">Included</span>
-                              ) : (
-                                <span className="text-muted">Not included</span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Source:</span>
-                            <span className="font-medium">
-                              {includesSource ? (
-                                <span className="text-green-600">Included</span>
-                              ) : (
-                                <span className="text-muted">Not included</span>
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Uploaded Files:</span>
-                            <span className="font-medium">{uploadedFiles.length}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* xLights Metadata Summary */}
-                      {(xLightsVersionMin || targetUse || expectedProps) && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h3 className="font-semibold mb-3">xLights Metadata</h3>
-                            <div className="space-y-2 text-sm">
-                              {xLightsVersionMin && (
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Compatibility:</span>
-                                  <span className="font-medium">
-                                    xLights {xLightsVersionMin}
-                                    {xLightsVersionMax && ` - ${xLightsVersionMax}`}
-                                  </span>
-                                </div>
-                              )}
-                              {targetUse && (
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Target Use:</span>
-                                  <span className="font-medium">{targetUse}</span>
-                                </div>
-                              )}
-                              {expectedProps && (
-                                <div className="flex flex-col gap-1">
-                                  <span className="text-muted-foreground">Expected Props:</span>
-                                  <span className="font-medium">{expectedProps}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      <Separator />
-
-                      {/* Validation */}
-                      <div className="space-y-2">
-                        {!stripeStatus?.canReceivePayments && (
-                          <div className="flex items-start gap-2 text-red-600 bg-red-50 p-3 rounded border border-red-200">
-                            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                            <div>
-                              <p className="font-semibold">Stripe Account Required</p>
-                              <p className="text-sm">
-                                You must connect your Stripe account before you can publish products.
-                              </p>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-                                onClick={() => router.push('/dashboard/creator/onboarding')}
-                              >
-                                <CreditCard className="h-4 w-4 mr-2" />
-                                Set Up Stripe Now
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
-                        {(!title.trim() || !description.trim() || !category || price === '') && (
-                          <div className="flex items-start gap-2 text-yellow-600 bg-yellow-50 p-3 rounded">
-                            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                            <div>
-                              <p className="font-semibold">Missing Required Fields</p>
-                              <p className="text-sm">
-                                Please fill in all required fields (*)
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {(!includesFSEQ && !includesSource && uploadedFiles.length === 0) && (
-                          <div className="flex items-start gap-2 text-yellow-600 bg-yellow-50 p-3 rounded">
-                            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                            <div>
-                              <p className="font-semibold">No Files</p>
-                              <p className="text-sm">
-                                Add files or enable at least one file type (FSEQ or Source)
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {title.trim() && description.trim() && category && price !== '' &&
-                          (includesFSEQ || includesSource || uploadedFiles.length > 0) &&
-                          stripeStatus?.canReceivePayments && (
-                            <div className="flex items-start gap-2 text-green-600 bg-green-50 p-3 rounded">
-                              <Check className="h-5 w-5 flex-shrink-0" />
-                              <div>
-                                <p className="font-semibold">Ready to Publish!</p>
-                                <p className="text-sm">
-                                  Your product has all required information and your Stripe account is connected.
-                                  You can save as draft or publish now.
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        )}
+          {draftId ? (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Draft ID: <span className="font-mono">{draftId}</span>
+            </p>
+          ) : null}
+        </div>
       </div>
-    </div>
     </div>
   );
 }
