@@ -4,6 +4,8 @@ This file defines when to automatically invoke specialized agents for specific t
 
 ## Agent Registry
 
+### Domain-Specific Agents
+
 ### 1. Security Guardian Agent
 **File**: `.claude/agents/security-guardian.md`
 **Expertise**: Security audits, access control, threat mitigation, compliance
@@ -31,6 +33,24 @@ This file defines when to automatically invoke specialized agents for specific t
 ### 7. SEO & Metadata Specialist Agent
 **File**: `.claude/agents/seo-metadata-specialist.md`
 **Expertise**: SEO best practices, structured data, sitemaps, meta tags, Open Graph, social sharing
+
+### Workflow & Process Agents
+
+### 8. Project Architect Agent
+**File**: `.claude/agents/project-architect.md`
+**Expertise**: Planning, task breakdown, architectural decisions, technology choices, cross-agent coordination
+
+### 9. Code Quality Specialist Agent
+**File**: `.claude/agents/code-quality-specialist.md`
+**Expertise**: Code review, refactoring, design patterns, TypeScript best practices, maintainability
+
+### 10. Implementation Coordinator Agent
+**File**: `.claude/agents/implementation-coordinator.md`
+**Expertise**: Workflow management, agent orchestration, progress tracking, quality gates, task coordination
+
+### 11. Test Strategy Agent
+**File**: `.claude/agents/test-strategy.md`
+**Expertise**: Test planning, validation strategies, test coverage, quality assurance, test implementation
 
 ---
 
@@ -559,4 +579,171 @@ These rules should be reviewed and updated:
 
 ---
 
+### Project Architect Agent - Auto-Invoke When:
+
+#### Trigger Keywords in User Request:
+- "plan" + "feature" OR "implementation"
+- "architecture" + "design" OR "decision"
+- "break down" + "task" OR "feature"
+- "roadmap" OR "planning"
+- "how should we" + "implement" OR "build"
+- "design" + "system" OR "architecture"
+- "approach" + "decide" OR "choose"
+
+#### Trigger File Operations:
+- Planning a new major feature
+- Making architectural decisions
+- Designing database schema changes
+- Evaluating technology choices
+
+#### Examples:
+```
+User: "Plan the implementation of creator analytics dashboard"
+→ INVOKE: Project Architect Agent
+
+User: "How should we architect the notification system?"
+→ INVOKE: Project Architect Agent
+
+User: "Break down the task of adding product reviews"
+→ INVOKE: Project Architect Agent
+
+User: "Help me decide between approach A and B for caching"
+→ INVOKE: Project Architect Agent
+```
+
+### Code Quality Specialist Agent - Auto-Invoke When:
+
+#### Trigger Keywords in User Request:
+- "review" + "code" OR "quality"
+- "refactor" OR "refactoring"
+- "code smell" OR "anti-pattern"
+- "improve" + "code" OR "quality"
+- "best practices" + "code"
+- "clean up" + "code"
+- "optimize" + "code" (quality, not performance)
+
+#### Trigger File Operations:
+- After implementing a feature (code review)
+- Before finalizing implementation
+- When code quality issues are suspected
+- During refactoring sessions
+
+#### Examples:
+```
+User: "Review the code quality of the new dashboard"
+→ INVOKE: Code Quality Specialist Agent
+
+User: "Help me refactor this component to be more maintainable"
+→ INVOKE: Code Quality Specialist Agent
+
+User: "Check for code smells in the authentication system"
+→ INVOKE: Code Quality Specialist Agent
+
+User: "Review this code for TypeScript best practices"
+→ INVOKE: Code Quality Specialist Agent
+```
+
+### Implementation Coordinator Agent - Auto-Invoke When:
+
+#### Trigger Keywords in User Request:
+- "implement" + "feature" (large/complex)
+- "build" + "system" OR "feature"
+- "coordinate" + "implementation"
+- "execute" + "plan"
+- "manage" + "implementation"
+- Starting a multi-step feature implementation
+
+#### Trigger File Operations:
+- Implementing a feature from a plan
+- Coordinating multiple specialists
+- Managing complex workflows
+- Tracking implementation progress
+
+#### Examples:
+```
+User: "Implement the Stripe Connect onboarding flow"
+→ INVOKE: Implementation Coordinator Agent
+
+User: "Build the file upload system with all features"
+→ INVOKE: Implementation Coordinator Agent
+
+User: "Execute the plan for the admin panel"
+→ INVOKE: Implementation Coordinator Agent
+```
+
+### Test Strategy Agent - Auto-Invoke When:
+
+#### Trigger Keywords in User Request:
+- "test" + "plan" OR "strategy"
+- "testing" + "approach" OR "coverage"
+- "write tests" + "for"
+- "validate" + "feature"
+- "quality assurance" OR "QA"
+- "test cases" OR "test scenarios"
+- "manual test" + "checklist"
+
+#### Trigger File Operations:
+- Before deploying a feature
+- After implementing critical functionality
+- When planning test coverage
+- During QA phase
+
+#### Examples:
+```
+User: "Create a test plan for the checkout flow"
+→ INVOKE: Test Strategy Agent
+
+User: "Help me write tests for the authentication system"
+→ INVOKE: Test Strategy Agent
+
+User: "What should I test before deploying file uploads?"
+→ INVOKE: Test Strategy Agent
+
+User: "Create a manual testing checklist for the dashboard"
+→ INVOKE: Test Strategy Agent
+```
+
+---
+
+## Workflow Agent Coordination
+
+### Typical Full Feature Workflow
+
+```
+1. Planning Phase
+   → Project Architect: Creates implementation plan
+   → Domain Agents: Consulted for domain-specific design
+
+2. Implementation Phase
+   → Implementation Coordinator: Manages execution
+   → Domain Agents: Provide expertise during implementation
+   → Code Quality Specialist: Reviews code as it's written
+
+3. Review Phase
+   → Security Guardian: Security review (if applicable)
+   → Code Quality Specialist: Final code review
+   → Test Strategy: Validates testing approach
+
+4. Testing Phase
+   → Test Strategy: Test planning and execution
+   → Domain Agents: Domain-specific test validation
+
+5. Finalization
+   → Code Quality Specialist: Final review
+   → Implementation Coordinator: Marks complete
+```
+
+### Quick Reference: Workflow Agents
+
+| When to Use | Agent | Purpose |
+|-------------|-------|---------|
+| Starting a feature | Project Architect | Plan and design |
+| Building a feature | Implementation Coordinator | Execute and track |
+| Code review needed | Code Quality Specialist | Review and improve |
+| Testing needed | Test Strategy | Plan and validate tests |
+
+---
+
 **Remember**: When in doubt, invoke the Security Guardian. Security is not optional in a marketplace platform.
+
+**New Workflow**: For complex features, start with Project Architect → Implementation Coordinator → Code Quality Specialist → Test Strategy.

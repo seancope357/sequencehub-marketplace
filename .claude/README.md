@@ -202,6 +202,118 @@ User: "Implement dynamic sitemap and meta tags"
 
 ---
 
+## Workflow & Process Agents
+
+### 🏗️ Project Architect Agent
+**File**: `agents/project-architect.md`
+
+**Expertise**:
+- Strategic planning and feature roadmaps
+- System architecture design
+- Task breakdown and sequencing
+- Technology decisions and trade-offs
+- Cross-agent coordination
+- Database schema design
+- Implementation strategy
+
+**Auto-Invoked For**:
+- Planning new features
+- Making architectural decisions
+- Breaking down complex tasks
+- Designing system architecture
+- Evaluating technology choices
+- Creating implementation roadmaps
+
+**Example Usage**:
+```
+User: "Plan the implementation of creator analytics dashboard"
+→ Project Architect creates detailed plan, task breakdown, architecture design
+```
+
+---
+
+### ✨ Code Quality Specialist Agent
+**File**: `agents/code-quality-specialist.md`
+
+**Expertise**:
+- Code review and analysis
+- Refactoring and optimization
+- Design patterns and best practices
+- TypeScript and type safety
+- React and Next.js patterns
+- Code maintainability
+- Identifying code smells
+
+**Auto-Invoked For**:
+- Code reviews
+- Refactoring guidance
+- Identifying code smells
+- Improving code quality
+- TypeScript best practices
+- Component architecture review
+
+**Example Usage**:
+```
+User: "Review the code quality of the new dashboard"
+→ Code Quality Specialist analyzes code, suggests improvements, provides examples
+```
+
+---
+
+### 🎯 Implementation Coordinator Agent
+**File**: `agents/implementation-coordinator.md`
+
+**Expertise**:
+- Implementation workflow management
+- Agent orchestration and coordination
+- Development process execution
+- Quality assurance during implementation
+- Progress tracking with TodoWrite
+- Managing dependencies between tasks
+
+**Auto-Invoked For**:
+- Executing complex features
+- Coordinating multiple specialists
+- Managing multi-step implementations
+- Tracking implementation progress
+- Ensuring quality gates are met
+
+**Example Usage**:
+```
+User: "Implement the Stripe Connect onboarding flow"
+→ Implementation Coordinator manages workflow, invokes specialists, tracks progress
+```
+
+---
+
+### 🧪 Test Strategy Agent
+**File**: `agents/test-strategy.md`
+
+**Expertise**:
+- Test planning and strategy
+- Test coverage analysis
+- Unit, integration, and e2e testing
+- Quality validation
+- Security testing
+- Performance testing
+- Manual testing procedures
+
+**Auto-Invoked For**:
+- Test planning
+- Creating test cases
+- Validating test coverage
+- Pre-deployment testing
+- Quality assurance
+- Test implementation guidance
+
+**Example Usage**:
+```
+User: "Create a test plan for the checkout flow"
+→ Test Strategy designs comprehensive test plan with unit, integration, and manual tests
+```
+
+---
+
 ## How Agents Are Invoked
 
 ### Automatic Invocation
@@ -297,17 +409,23 @@ When multiple agents could apply:
 
 ```
 .claude/
-├── README.md                          # This file
+├── README.md                           # This file
 ├── agents/
-│   ├── security-guardian.md           # Security expert agent
-│   ├── xlights-specialist.md          # xLights domain expert
-│   ├── stripe-payment-orchestrator.md # Payment expert agent
-│   ├── file-storage-orchestrator.md   # File upload & storage expert
-│   ├── background-job-manager.md      # Job queue & worker expert
-│   ├── admin-panel-architect.md       # Admin interface expert
-│   └── seo-metadata-specialist.md     # SEO & metadata expert
+│   ├── Domain-Specific Agents
+│   ├── security-guardian.md            # Security expert agent
+│   ├── xlights-specialist.md           # xLights domain expert
+│   ├── stripe-payment-orchestrator.md  # Payment expert agent
+│   ├── file-storage-orchestrator.md    # File upload & storage expert
+│   ├── background-job-manager.md       # Job queue & worker expert
+│   ├── admin-panel-architect.md        # Admin interface expert
+│   ├── seo-metadata-specialist.md      # SEO & metadata expert
+│   ├── Workflow & Process Agents
+│   ├── project-architect.md            # Planning & architecture expert
+│   ├── code-quality-specialist.md      # Code review & quality expert
+│   ├── implementation-coordinator.md   # Workflow management expert
+│   └── test-strategy.md                # Testing & QA expert
 └── rules/
-    └── agent-invocation-rules.md      # When to invoke which agent
+    └── agent-invocation-rules.md       # When to invoke which agent
 ```
 
 ## Adding New Agents
@@ -449,6 +567,8 @@ Update the relevant files:
 
 ## Quick Reference
 
+### Domain-Specific Agents
+
 | I want to... | Use this agent | Example request |
 |--------------|----------------|-----------------|
 | Review auth code | Security Guardian | "Audit authentication flow" |
@@ -467,6 +587,26 @@ Update the relevant files:
 | Process refunds | Stripe Orchestrator | "Handle charge.refunded event" |
 | Check compliance | Security Guardian | "Verify GDPR compliance" |
 
+### Workflow & Process Agents
+
+| I want to... | Use this agent | Example request |
+|--------------|----------------|-----------------|
+| Plan a feature | Project Architect | "Plan implementation of analytics dashboard" |
+| Design architecture | Project Architect | "Design the notification system architecture" |
+| Break down tasks | Project Architect | "Break down the product reviews feature" |
+| Make tech decisions | Project Architect | "Help choose between caching approaches" |
+| Review code quality | Code Quality Specialist | "Review the dashboard code quality" |
+| Refactor code | Code Quality Specialist | "Refactor this component for maintainability" |
+| Find code smells | Code Quality Specialist | "Check for code smells in auth system" |
+| Improve code | Code Quality Specialist | "Suggest improvements for this file" |
+| Execute feature | Implementation Coordinator | "Implement the Stripe Connect flow" |
+| Coordinate agents | Implementation Coordinator | "Build the complete upload system" |
+| Track progress | Implementation Coordinator | "Manage implementation of admin panel" |
+| Plan tests | Test Strategy | "Create test plan for checkout" |
+| Write tests | Test Strategy | "Help write tests for authentication" |
+| Validate quality | Test Strategy | "What to test before deployment?" |
+| Create test checklist | Test Strategy | "Manual testing checklist for feature" |
+
 ## Support
 
 For questions about the agent system:
@@ -477,4 +617,37 @@ For questions about the agent system:
 
 ---
 
+## Recommended Workflow for New Features
+
+For complex features, use this workflow:
+
+1. **Planning** → Project Architect
+   - Creates implementation plan
+   - Designs architecture
+   - Breaks down tasks
+
+2. **Implementation** → Implementation Coordinator
+   - Executes the plan
+   - Coordinates domain agents
+   - Tracks progress
+
+3. **Quality Review** → Code Quality Specialist
+   - Reviews code quality
+   - Suggests improvements
+   - Ensures best practices
+
+4. **Security Review** → Security Guardian (if applicable)
+   - Audits security
+   - Validates auth/authz
+   - Ensures compliance
+
+5. **Testing** → Test Strategy
+   - Plans test coverage
+   - Validates testing approach
+   - Ensures quality
+
+---
+
 **Remember**: These agents are here to help you build SequenceHUB securely, efficiently, and with domain expertise. Use them liberally!
+
+**New Workflow Agents** make it easy to plan, implement, review, and test features systematically. Start with Project Architect for any new feature!
