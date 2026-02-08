@@ -53,7 +53,15 @@ DROP POLICY IF EXISTS "Users can read own settings" ON public.user_settings;
 CREATE POLICY "Users can read own settings"
   ON public.user_settings
   FOR SELECT
-  USING (user_id = auth.uid() OR auth.has_role('ADMIN'));
+  USING (
+    user_id = auth.uid()
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_roles ur
+      WHERE ur.user_id = auth.uid()
+        AND ur.role::text = 'ADMIN'
+    )
+  );
 
 DROP POLICY IF EXISTS "Users can insert own settings" ON public.user_settings;
 CREATE POLICY "Users can insert own settings"
@@ -73,4 +81,3 @@ CREATE POLICY "Service role can manage user settings"
   ON public.user_settings
   FOR ALL
   USING (auth.role() = 'service_role');
-
