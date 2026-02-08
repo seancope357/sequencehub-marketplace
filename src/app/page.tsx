@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { SequenceHubLogo } from '@/components/branding/SequenceHubLogo';
 
 export default function HomePage() {
   const router = useRouter();
@@ -24,13 +25,14 @@ export default function HomePage() {
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold">SequenceHUB</h1>
-                <p className="text-xs text-muted-foreground">xLights Marketplace</p>
-              </div>
-            </div>
+            <button
+              type="button"
+              className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => router.push('/')}
+              aria-label="Go to homepage"
+            >
+              <SequenceHubLogo variant="header" />
+            </button>
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
