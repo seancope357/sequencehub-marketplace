@@ -5,15 +5,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Package,
   Search,
   ArrowRight,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface Product {
   id: string;
@@ -59,33 +58,7 @@ export default function BrowsePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2" onClick={() => router.push('/')} style={{cursor: 'pointer'}}>
-              <Package className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold">SequenceHUB</h1>
-                <p className="text-xs text-muted-foreground">xLights Marketplace</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => router.push('/auth/login')}
-                className="hidden sm:inline-flex"
-              >
-                Login
-              </Button>
-              <Button onClick={() => router.push('/auth/register')} className="gap-2">
-                <Sparkles className="h-4 w-4" />
-                Start Selling
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="Browse" showBrowse={false} />
 
       {/* Browse Section */}
       <section className="container mx-auto px-4 py-8">

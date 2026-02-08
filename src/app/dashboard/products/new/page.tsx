@@ -34,6 +34,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface UploadedFile {
   id: string;
@@ -364,44 +365,27 @@ export default function NewProductPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span
-                className="font-semibold cursor-pointer"
-                onClick={() => router.push('/')}
-              >
-                SequenceHUB
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span>New Product</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push('/dashboard')}
-              >
-                Back to Products
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPreview(!showPreview)}
-              >
-                <Eye className="h-4 w-4 mr-2" />
-                {showPreview ? 'Edit' : 'Preview'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="New Product" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-5xl mx-auto">
+          <div className="flex items-center justify-end gap-2 mb-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/dashboard/products')}
+            >
+              Back to Products
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              {showPreview ? 'Edit' : 'Preview'}
+            </Button>
+          </div>
           {/* Stripe Account Requirement Banner */}
           {!stripeLoading && stripeStatus && !stripeStatus.canReceivePayments && (
             <Alert variant="destructive" className="mb-6">

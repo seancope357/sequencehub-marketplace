@@ -1,12 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   Package,
   Download,
   Clock,
-  AlertCircle,
+  CheckCircle,
   ShoppingCart,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,7 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import { AppHeader } from '@/components/navigation/AppHeader';
@@ -42,6 +40,8 @@ interface Product {
   media: {
     storageKey: string;
     mediaType: string;
+    mimeType?: string | null;
+    url?: string | null;
   }[];
   versions: {
     id: string;
@@ -64,39 +64,13 @@ interface Product {
   purchased?: boolean;
 }
 
-export default function ProductPage() {
-  const params = useParams();
+interface ProductPageClientProps {
+  product: Product;
+}
+
+export function ProductPageClient({ product }: ProductPageClientProps) {
   const router = useRouter();
-  const slug = params.slug as string;
-  const { isAuthenticated, user } = useAuth();
-
-  const [product, setProduct] = useState<Product | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedImage, setSelectedImage] = useState(0);
-
-  useEffect(() => {
-    if (slug) {
-      loadProduct();
-    }
-  }, [slug]);
-
-  const loadProduct = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(`/api/products/${slug}`);
-      if (response.ok) {
-        const data = await response.json();
-        setProduct(data.product);
-      } else if (response.status === 404) {
-        toast.error('Product not found');
-      }
-    } catch (error) {
-      console.error('Error loading product:', error);
-      toast.error('Failed to load product');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { isAuthenticated } = useAuth();
 
   const handleBuyNow = async () => {
     if (!isAuthenticated) {
@@ -105,21 +79,18 @@ export default function ProductPage() {
       return;
     }
 
-    if (!product) return;
-
     try {
       const response = await fetch('/api/checkout/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: product.id,
-          priceId: product.id, // Will be updated to actual price ID
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        router.push(data.checkoutUrl);
+        window.location.assign(data.checkoutUrl);
       } else {
         toast.error('Failed to create checkout session');
       }
@@ -144,101 +115,93 @@ export default function ProductPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <Skeleton className="aspect-video w-full rounded-lg" />
-              <div className="flex gap-2">
-                {[...Array(4)].map((_, i) => (
-                  <Skeleton key={i} className="h-20 w-20 rounded" />
-                ))}
-              </div>
-            </div>
-            <div className="space-y-4">
-              <Skeleton className="h-8 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-16 w-full" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!product) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="p-8 text-center">
-            <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Product Not Found</h2>
-            <p className="text-muted-foreground mb-4">
-              The product you're looking for doesn't exist or has been removed.
-            </p>
-            <Button onClick={() => router.push('/')}>
-              Back to Marketplace
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const coverImage = product.media.find((m) => m.mediaType === 'cover');
-  const galleryImages = product.media.filter((m) => m.mediaType === 'gallery');
-
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader />
+      <AppHeader browseLabel="Browse" browseHref="/browse" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left: Images */}
+          {/* Left: Media */}
           <div className="space-y-4">
-            <Card>
-              <CardContent className="p-0">
-                <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
-                  {coverImage ? (
-                    <img
-                      src={`/api/media/${coverImage.storageKey}`}
-                      alt={product.title}
-                      className="object-cover w-full h-full"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Package className="h-24 w-24 text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {galleryImages.length > 0 && (
-              <div className="grid grid-cols-4 gap-2">
-                {galleryImages.map((image, index) => (
-                  <Card
-                    key={image.id}
-                    className={`cursor-pointer transition-all ${
-                      selectedImage === index ? 'ring-2 ring-primary' : ''
-                    }`}
-                    onClick={() => setSelectedImage(index)}
-                  >
-                    <CardContent className="p-1">
-                      <div className="aspect-video bg-muted rounded overflow-hidden">
-                        <img
-                          src={`/api/media/${image.storageKey}`}
-                          alt={`${product.title} ${index + 1}`}
-                          className="object-cover w-full h-full"
-                        />
+            {product.media.length === 0 ? (
+              <>
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Package className="h-24 w-24 text-muted-foreground" />
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="text-sm text-muted-foreground">
+                  No preview images available.
+                </div>
+              </>
+            ) : (
+              <>
+                {(() => {
+                  const cover =
+                    product.media.find((item) => item.mediaType === 'cover') || product.media[0];
+                  if (!cover?.url) {
+                    return (
+                      <Card>
+                        <CardContent className="p-0">
+                          <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg" />
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  const isVideo = cover.mimeType?.startsWith('video/');
+
+                  return (
+                    <Card>
+                      <CardContent className="p-0">
+                        <div className="aspect-video bg-muted relative overflow-hidden rounded-t-lg">
+                          {isVideo ? (
+                            <video
+                              src={cover.url}
+                              className="h-full w-full object-cover"
+                              controls
+                            />
+                          ) : (
+                            <img
+                              src={cover.url}
+                              alt={product.title}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                <div className="grid grid-cols-4 gap-2">
+                  {product.media
+                    .filter((item) => item.mediaType !== 'cover')
+                    .slice(0, 8)
+                    .map((item) => (
+                      <div
+                        key={item.storageKey}
+                        className="aspect-square rounded border overflow-hidden bg-muted"
+                      >
+                        {item.url ? (
+                          item.mimeType?.startsWith('video/') ? (
+                            <video src={item.url} className="h-full w-full object-cover" />
+                          ) : (
+                            <img
+                              src={item.url}
+                              alt={product.title}
+                              className="h-full w-full object-cover"
+                            />
+                          )
+                        ) : null}
+                      </div>
+                    ))}
+                </div>
+              </>
             )}
           </div>
 
@@ -264,17 +227,14 @@ export default function ProductPage() {
             {/* Creator Info */}
             <Card>
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-sm font-semibold">
-                      {product.creator.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-semibold">{product.creator.name}</div>
-                      <div className="text-sm text-muted-foreground">Creator</div>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-sm font-semibold">
+                    {product.creator.name.charAt(0).toUpperCase()}
                   </div>
-
+                  <div>
+                    <div className="font-semibold">{product.creator.name}</div>
+                    <div className="text-sm text-muted-foreground">Creator</div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -292,13 +252,12 @@ export default function ProductPage() {
                       {product.licenseType === 'PERSONAL' && 'Personal License'}
                     </div>
                   </div>
-
                 </div>
 
                 {product.purchased ? (
                   <Button className="w-full" size="lg" onClick={() => router.push('/library')}>
-                    <Download className="h-5 w-5 mr-2" />
-                    Download Now
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Go to Library
                   </Button>
                 ) : (
                   <Button className="w-full" size="lg" onClick={handleBuyNow}>
@@ -379,13 +338,13 @@ export default function ProductPage() {
                     <div className="flex gap-2 mb-4">
                       {product.includesFSEQ && (
                         <Badge variant="default">
-                          <Download className="h-3 w-3 mr-1" />
+                          <CheckCircle className="h-3 w-3 mr-1" />
                           Includes FSEQ
                         </Badge>
                       )}
                       {product.includesSource && (
                         <Badge variant="default">
-                          <Download className="h-3 w-3 mr-1" />
+                          <CheckCircle className="h-3 w-3 mr-1" />
                           Includes Source
                         </Badge>
                       )}

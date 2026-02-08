@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Package, User, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { User } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
+import { AppHeader } from '@/components/navigation/AppHeader';
+import { SellerSidebarNav } from '@/components/dashboard/seller/SellerSidebarNav';
 
 export default function SettingsPage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -25,35 +26,15 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => (window.location.href = '/')}>
-                SequenceHUB
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span>Settings</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => (window.location.href = '/dashboard')}>
-                Dashboard
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="Settings" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold mb-2">Account Settings</h1>
-          <p className="text-muted-foreground mb-8">Manage your account and preferences</p>
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold mb-2">Account Settings</h1>
+            <p className="text-muted-foreground mb-4">Manage your account and preferences</p>
+            <SellerSidebarNav />
+          </div>
 
           {/* Account Info */}
           <Card className="mb-6">

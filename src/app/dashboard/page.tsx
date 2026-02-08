@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
+import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface DashboardStats {
   totalProducts: number;
@@ -120,36 +121,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-6 w-6 text-primary" />
-              <span className="font-semibold cursor-pointer" onClick={() => router.push('/')}>
-                SequenceHUB
-              </span>
-              <span className="text-muted-foreground">/</span>
-              <span>Dashboard</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-sm font-semibold">
-                  {user.name?.charAt(0).toUpperCase() || 'U'}
-                </div>
-                <span className="text-sm">{user.name || 'User'}</span>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
-                Marketplace
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => {}}>
-                <CircleHelp className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader contextLabel="Dashboard" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
