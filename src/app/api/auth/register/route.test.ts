@@ -48,7 +48,10 @@ describe('POST /api/auth/register', () => {
     vi.clearAllMocks();
     mocks.applyRateLimit.mockResolvedValue({ allowed: true });
     mocks.signUp.mockResolvedValue({
-      data: { user: { id: 'user-1', email: 'new@example.com' } },
+      data: {
+        user: { id: 'user-1', email: 'new@example.com' },
+        session: { access_token: 'token' },
+      },
       error: null,
     });
     mocks.createRouteHandlerClient.mockReturnValue({
@@ -130,16 +133,51 @@ describe('POST /api/auth/register', () => {
     expect(payload.error).toBe('An account with this email already exists. Please sign in.');
   });
 
-  it('returns 500 when user profile cannot be ensured', async () => {
+  it('returns fallback user when profile sync fails', async () => {
     mocks.ensureUserRecord.mockResolvedValueOnce(null);
+    mocks.signUp.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'user-1',
+          email: 'new@example.com',
+          user_metadata: { name: 'Fallback User' },
+        },
+        session: { access_token: 'token' },
+      },
+      error: null,
+    });
 
     const response = await POST(
       createRequest({ email: 'new@example.com', password: 'Password123', acceptedLegal: true }) as any
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(payload.error).toBe('Failed to load user profile');
+    expect(response.status).toBe(201);
+    expect(payload.user).toEqual({
+      id: 'user-1',
+      email: 'new@example.com',
+      name: 'Fallback User',
+      roles: [{ id: 'fallback-role-user-1', role: 'BUYER' }],
+    });
+  });
+
+  it('returns verification-required response when session is not created', async () => {
+    mocks.signUp.mockResolvedValueOnce({
+      data: {
+        user: { id: 'user-1', email: 'new@example.com' },
+        session: null,
+      },
+      error: null,
+    });
+
+    const response = await POST(
+      createRequest({ email: 'new@example.com', password: 'Password123', acceptedLegal: true }) as any
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.requiresEmailVerification).toBe(true);
+    expect(payload.message).toContain('Check your email');
   });
 
   it('returns created user payload and triggers welcome email', async () => {

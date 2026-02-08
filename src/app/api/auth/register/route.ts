@@ -46,6 +46,19 @@ function mapSignUpError(message: string | undefined): { status: number; error: s
   };
 }
 
+function buildFallbackUser(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
+  const name = typeof user.user_metadata?.name === 'string'
+    ? user.user_metadata.name
+    : user.email?.split('@')[0];
+
+  return {
+    id: user.id,
+    email: user.email || '',
+    name: name || undefined,
+    roles: [{ id: `fallback-role-${user.id}`, role: 'BUYER' as const }],
+  };
+}
+
 export async function POST(request: NextRequest) {
   // Apply rate limiting: 5 attempts per hour per IP
   const limitResult = await applyRateLimit(request, {
@@ -146,34 +159,39 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await ensureUserRecord(data.user);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Failed to load user profile' },
-        { status: 500 }
-      );
-    }
+    const safeUser = user ? {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      roles: user.roles,
+    } : buildFallbackUser(data.user);
 
     // Send welcome email (fire and forget - don't block response)
-    sendWelcomeEmail({
-      recipientEmail: user.email,
-      userName: user.name || 'there',
-      dashboardUrl: `${getBaseUrl()}/dashboard`,
-      registrationDate: new Date(),
-    }).catch((error) => {
-      console.error('Failed to send welcome email:', error);
-      // Don't fail registration if email fails
-    });
+    if (safeUser.email) {
+      sendWelcomeEmail({
+        recipientEmail: safeUser.email,
+        userName: safeUser.name || 'there',
+        dashboardUrl: `${getBaseUrl()}/dashboard`,
+        registrationDate: new Date(),
+      }).catch((error) => {
+        console.error('Failed to send welcome email:', error);
+        // Don't fail registration if email fails
+      });
+    }
+
+    const isPendingEmailVerification = !data.session;
+    const status = isPendingEmailVerification ? 200 : 201;
+    const message = isPendingEmailVerification
+      ? 'Account created. Check your email to verify your account before signing in.'
+      : undefined;
 
     const response = NextResponse.json(
       {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          roles: user.roles,
-        },
+        user: safeUser,
+        requiresEmailVerification: isPendingEmailVerification,
+        message,
       },
-      { status: 201 }
+      { status }
     );
 
     response.headers.set('Cache-Control', 'no-store');

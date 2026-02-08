@@ -87,7 +87,13 @@ export default function RegisterPage() {
       if (response.ok) {
         const data = await response.json();
 
-        // Update auth store immediately with user data
+        if (data.requiresEmailVerification) {
+          toast.success(data.message || 'Account created. Check your email to verify your account.');
+          router.replace(`/auth/login?checkEmail=1&email=${encodeURIComponent(cleanEmail)}`);
+          return;
+        }
+
+        // Update auth store immediately with user data when a session was created.
         setUser(data.user);
 
         toast.success(`Welcome, ${data.user.name || data.user.email}!`);
@@ -96,8 +102,14 @@ export default function RegisterPage() {
         router.replace('/dashboard');
         router.refresh();
       } else {
-        const error = await response.json();
-        toast.error(error.error || 'Registration failed');
+        let apiError: string | undefined;
+        try {
+          const payload = await response.json();
+          apiError = payload?.error;
+        } catch {
+          apiError = undefined;
+        }
+        toast.error(apiError || 'Registration failed');
       }
     } catch (error) {
       console.error('Registration error:', error);

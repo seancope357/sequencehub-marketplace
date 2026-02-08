@@ -11,6 +11,30 @@ import { createRouteHandlerClient } from './route-handler';
 import type { AuthUser, RoleName } from '@/lib/auth-types';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
+function buildFallbackAuthUser(authUser: SupabaseUser): AuthUser {
+  const fallbackName =
+    (authUser.user_metadata?.name as string | undefined) ||
+    authUser.email?.split('@')[0] ||
+    'User';
+
+  const fallbackAvatar =
+    (authUser.user_metadata?.avatar as string | undefined) ||
+    (authUser.user_metadata?.picture as string | undefined) ||
+    undefined;
+
+  return {
+    id: authUser.id,
+    email: authUser.email ?? '',
+    name: fallbackName,
+    avatar: fallbackAvatar,
+    emailVerified: authUser.email_confirmed_at !== null,
+    roles: [{ id: `fallback-role-${authUser.id}`, role: 'BUYER' }],
+    profile: null,
+    createdAt: authUser.created_at,
+    updatedAt: authUser.updated_at ?? authUser.created_at,
+  };
+}
+
 // ============================================
 // USER MANAGEMENT
 // ============================================
@@ -44,7 +68,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     if (ensured) {
       return ensured;
     }
-    return null;
+    return buildFallbackAuthUser(user);
   }
 
   return {
@@ -89,17 +113,7 @@ export async function getCurrentUserFromRequest(
     if (ensured) {
       return ensured;
     }
-    return {
-      id: user.id,
-      email: user.email!,
-      name: (user.user_metadata?.name as string | undefined),
-      avatar: (user.user_metadata?.avatar as string | undefined),
-      emailVerified: user.email_confirmed_at !== null,
-      roles: [],
-      profile: null,
-      createdAt: user.created_at,
-      updatedAt: user.updated_at ?? user.created_at,
-    };
+    return buildFallbackAuthUser(user);
   }
 
   return {
@@ -122,7 +136,13 @@ export async function getCurrentUserFromRequest(
 export async function ensureUserRecord(
   authUser: SupabaseUser
 ): Promise<AuthUser | null> {
-  const admin = createAdminClient();
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch (error) {
+    console.warn('Service role key unavailable, using fallback auth user shape');
+    return buildFallbackAuthUser(authUser);
+  }
 
   const name =
     (authUser.user_metadata?.name as string | undefined) ||
@@ -148,7 +168,7 @@ export async function ensureUserRecord(
 
   if (userError) {
     console.error('Failed to upsert user record:', userError);
-    return null;
+    return buildFallbackAuthUser(authUser);
   }
 
   const { error: roleError } = await admin
@@ -162,7 +182,8 @@ export async function ensureUserRecord(
     console.error('Failed to upsert user role:', roleError);
   }
 
-  return getUserById(authUser.id);
+  const ensuredUser = await getUserById(authUser.id);
+  return ensuredUser ?? buildFallbackAuthUser(authUser);
 }
 
 /**

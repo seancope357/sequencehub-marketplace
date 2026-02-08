@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Mail, Lock, ArrowRight, Check } from 'lucide-react';
@@ -57,6 +57,25 @@ export default function LoginPage() {
   const isEmailValid = email.length > 0 ? isValidEmail(normalizedEmail) : false;
   const canSubmit = isEmailValid && password.length > 0 && !isLoading;
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkEmail = params.get('checkEmail');
+    const prefillingEmail = params.get('email');
+    const authError = params.get('authError');
+
+    if (prefillingEmail) {
+      setEmail(prefillingEmail);
+    }
+
+    if (checkEmail === '1') {
+      toast.success('Account created. Confirm your email, then sign in.');
+    }
+
+    if (authError) {
+      toast.error(authError);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -95,11 +114,17 @@ export default function LoginPage() {
         router.refresh();
       } else {
         let apiError: string | undefined;
+        let apiCode: string | undefined;
         try {
           const payload = await response.json();
           apiError = payload?.error;
+          apiCode = payload?.code;
         } catch {
           apiError = undefined;
+        }
+        if (apiCode === 'EMAIL_NOT_VERIFIED') {
+          toast.error('Please confirm your email address before signing in.');
+          return;
         }
         toast.error(normalizeLoginErrorMessage(apiError));
       }

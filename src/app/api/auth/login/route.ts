@@ -10,7 +10,7 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required').max(PASSWORD_MAX_LENGTH, 'Password is too long'),
 });
 
-function mapLoginError(message: string | undefined): string {
+function mapLoginError(message: string | undefined): { message: string; code: string } {
   const normalized = (message || '').toLowerCase();
 
   if (
@@ -19,15 +19,27 @@ function mapLoginError(message: string | undefined): string {
     normalized.includes('email not found') ||
     normalized.includes('user not found')
   ) {
-    return 'Invalid email or password';
+    return { message: 'Invalid email or password', code: 'INVALID_CREDENTIALS' };
   }
 
-  // Keep account-specific states generic to avoid account enumeration.
   if (normalized.includes('not confirmed') || normalized.includes('not verified')) {
-    return 'Invalid email or password';
+    return { message: 'Please confirm your email address before signing in.', code: 'EMAIL_NOT_VERIFIED' };
   }
 
-  return message || 'Invalid email or password';
+  return { message: message || 'Invalid email or password', code: 'AUTH_ERROR' };
+}
+
+function buildFallbackUser(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) {
+  const name = typeof user.user_metadata?.name === 'string'
+    ? user.user_metadata.name
+    : user.email?.split('@')[0];
+
+  return {
+    id: user.id,
+    email: user.email || '',
+    name: name || undefined,
+    roles: [{ id: `fallback-role-${user.id}`, role: 'BUYER' as const }],
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -95,8 +107,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (error || !data.user) {
+      const mappedError = mapLoginError(error?.message);
       return NextResponse.json(
-        { error: mapLoginError(error?.message) },
+        { error: mappedError.message, code: mappedError.code },
         { status: 401 }
       );
     }
@@ -113,21 +126,16 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await ensureUserRecord(data.user);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Failed to load user profile' },
-        { status: 500 }
-      );
-    }
+    const safeUser = user ? {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      roles: user.roles,
+    } : buildFallbackUser(data.user);
 
     const response = NextResponse.json(
       {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          roles: user.roles,
-        },
+        user: safeUser,
       },
       { status: 200 }
     );

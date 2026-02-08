@@ -106,14 +106,43 @@ describe('POST /api/auth/login', () => {
     expect(payload.error).toBe('Invalid email or password');
   });
 
-  it('returns 500 when user profile cannot be ensured', async () => {
+  it('returns fallback user when profile sync fails', async () => {
     mocks.ensureUserRecord.mockResolvedValueOnce(null);
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'user-1',
+          email: 'user@example.com',
+          user_metadata: { name: 'Fallback User' },
+        },
+      },
+      error: null,
+    });
 
     const response = await POST(createRequest({ email: 'a@b.com', password: 'password123' }) as any);
     const payload = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(payload.error).toBe('Failed to load user profile');
+    expect(response.status).toBe(200);
+    expect(payload.user).toEqual({
+      id: 'user-1',
+      email: 'user@example.com',
+      name: 'Fallback User',
+      roles: [{ id: 'fallback-role-user-1', role: 'BUYER' }],
+    });
+  });
+
+  it('returns verification-specific code when email is not confirmed', async () => {
+    mocks.signInWithPassword.mockResolvedValueOnce({
+      data: { user: null },
+      error: { message: 'Email not confirmed' },
+    });
+
+    const response = await POST(createRequest({ email: 'a@b.com', password: 'password123' }) as any);
+    const payload = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(payload.code).toBe('EMAIL_NOT_VERIFIED');
+    expect(payload.error).toContain('confirm your email');
   });
 
   it('returns authenticated user payload on success', async () => {
