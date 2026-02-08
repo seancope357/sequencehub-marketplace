@@ -171,6 +171,7 @@ model User {
 
   // Relations
   profile        Profile?
+  settings       UserSettings?
   roles          UserRole[]
   creatorAccount CreatorAccount?
   products       Product[]
@@ -215,6 +216,31 @@ model UserRole {
   @@unique([userId, role])
   @@index([userId])
   @@map("user_roles")
+}
+
+model UserSettings {
+  userId               String   @id @db.Uuid @map("user_id")
+  businessName         String?  @map("business_name")
+  supportEmail         String?  @map("support_email")
+  notificationEmail    String?  @map("notification_email")
+  timezone             String   @default("UTC")
+  currency             String   @default("USD")
+  dashboardDefaultView String   @default("overview") @map("dashboard_default_view")
+  productsPageSize     Int      @default(25) @map("products_page_size")
+  themePreference      String   @default("system") @map("theme_preference")
+  notifyNewOrder       Boolean  @default(true) @map("notify_new_order")
+  notifyPayouts        Boolean  @default(true) @map("notify_payouts")
+  notifyComments       Boolean  @default(false) @map("notify_comments")
+  notifySystem         Boolean  @default(true) @map("notify_system")
+  marketingOptIn       Boolean  @default(false) @map("marketing_opt_in")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([dashboardDefaultView])
+  @@index([updatedAt])
+  @@map("user_settings")
 }
 
 // ============================================
