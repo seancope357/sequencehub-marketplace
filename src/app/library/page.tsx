@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Package,
   Download,
   Calendar,
+  DollarSign,
   Eye,
   FileText,
 } from 'lucide-react';
@@ -14,7 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
-import { AppHeader } from '@/components/navigation/AppHeader';
 
 interface Purchase {
   id: string;
@@ -39,19 +38,17 @@ interface Purchase {
 }
 
 export default function Library() {
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const router = useRouter();
+  const { user, isAuthenticated, logout } = useAuth();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return;
     if (!isAuthenticated) {
-      router.push('/auth/login');
+      window.location.href = '/auth/login';
       return;
     }
     loadPurchases();
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated]);
 
   const loadPurchases = async () => {
     try {
@@ -77,25 +74,14 @@ export default function Library() {
         body: JSON.stringify({ entitlementId, fileVersionId }),
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        // Open download URL in new tab
+        window.open(data.downloadUrl, '_blank');
+        toast.success('Download started');
+      } else {
         toast.error('Failed to start download');
-        return;
       }
-
-      const data = await response.json();
-      const downloadUrls = data.downloadUrls || [];
-      if (downloadUrls.length === 0) {
-        toast.error('No download links available');
-        return;
-      }
-
-      downloadUrls.forEach((item: { downloadUrl: string }) => {
-        if (item?.downloadUrl) {
-          window.open(item.downloadUrl, '_blank');
-        }
-      });
-
-      toast.success('Download started');
     } catch (error) {
       console.error('Error downloading:', error);
       toast.error('Failed to start download');
@@ -123,13 +109,43 @@ export default function Library() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader contextLabel="My Library" browseLabel="Browse" browseHref="/browse" />
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Package className="h-6 w-6 text-primary" />
+              <span
+                className="font-semibold cursor-pointer"
+                onClick={() => (window.location.href = '/')}
+              >
+                SequenceHUB
+              </span>
+              <span className="text-muted-foreground">/</span>
+              <span>My Library</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => (window.location.href = '/')}>
+                Marketplace
+              </Button>
+              {user.roles.some((r) => r.role === 'CREATOR') && (
+                <Button variant="ghost" onClick={() => (window.location.href = '/dashboard')}>
+                  Dashboard
+                </Button>
+              )}
+              <Button variant="outline" onClick={logout}>
+                Logout
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
 
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">My Library</h1>
           <p className="text-muted-foreground">
-            Manage your purchased sequences
+            Manage your purchased sequences and downloads
           </p>
         </div>
 
@@ -141,7 +157,7 @@ export default function Library() {
               <p className="text-muted-foreground mb-4">
                 Start by exploring the marketplace
               </p>
-              <Button onClick={() => router.push('/')}>
+              <Button onClick={() => (window.location.href = '/')}>
                 Browse Marketplace
               </Button>
             </CardContent>
@@ -195,28 +211,17 @@ export default function Library() {
                     <div className="border rounded-lg p-4 bg-muted/50">
                       <div className="flex items-center justify-between">
                         <div>
-                          {purchase.version ? (
-                            <>
-                              <div className="font-semibold">
-                                Version {purchase.version.versionNumber} - {purchase.version.versionName}
-                              </div>
-                              <div className="text-sm text-muted-foreground">
-                                Published: {new Date(purchase.version.publishedAt).toLocaleDateString()}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-muted-foreground">
-                              Version details unavailable
-                            </div>
-                          )}
+                          <div className="font-semibold">
+                            Version {purchase.version.versionNumber} - {purchase.version.versionName}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Published: {new Date(purchase.version.publishedAt).toLocaleDateString()}
+                          </div>
                         </div>
                         <Button
                           onClick={() =>
-                            purchase.version
-                              ? handleDownload(purchase.id, purchase.version.id)
-                              : undefined
+                            handleDownload(purchase.id, purchase.version.id)
                           }
-                          disabled={!purchase.version}
                         >
                           <Download className="h-4 w-4 mr-2" />
                           Download
@@ -229,7 +234,9 @@ export default function Library() {
                       <Button
                         variant="outline"
                         className="flex-1"
-                        onClick={() => router.push(`/p/${purchase.product.slug}`)}
+                        onClick={() =>
+                          (window.location.href = `/p/${purchase.product.slug}`)
+                        }
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         View Product

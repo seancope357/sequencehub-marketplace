@@ -1,36 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import Stripe from 'stripe';
-import { getStripeConfigStatus, StripeConfigError } from '@/lib/stripe-connect';
 
-const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2024-12-18.acacia';
-let stripeClient: Stripe | null = null;
-
-function getStripeClient(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
-    throw new StripeConfigError('Stripe Connect is not configured for this environment.');
-  }
-
-  if (!stripeClient) {
-    stripeClient = new Stripe(key, { apiVersion: STRIPE_API_VERSION });
-  }
-
-  return stripeClient;
-}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2024-12-18.acacia',
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const stripeConfig = getStripeConfigStatus();
-    if (!stripeConfig.configured) {
-      return NextResponse.json(
-        { error: stripeConfig.message || 'Stripe Connect is not configured.' },
-        { status: 409 }
-      );
-    }
-
     const user = await getCurrentUser();
 
     if (!user) {
@@ -109,12 +88,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (creatorAccount.onboardingStatus !== 'COMPLETED') {
-      return NextResponse.json(
-        { error: 'Creator onboarding not complete' },
-        { status: 400 }
-      );
-    }
 
     // Create Stripe checkout session
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -158,7 +131,6 @@ export async function POST(request: NextRequest) {
       client_reference_id: `${user.id}_${Date.now()}`,
     };
 
-    const stripe = getStripeClient();
     const session = await stripe.checkout.sessions.create(sessionParams);
 
     // Create checkout session record
@@ -172,7 +144,7 @@ export async function POST(request: NextRequest) {
         currency: 'USD',
         status: 'PENDING',
         successUrl: sessionParams.success_url,
-        cancelUrl: sessionParams.cancel_url,
+        cancelUrl: sessionParams.cancelUrl,
         metadata: JSON.stringify(sessionParams.metadata),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
       },
@@ -187,12 +159,6 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Error creating checkout session:', error);
-    if (error instanceof StripeConfigError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 409 }
-      );
-    }
     return NextResponse.json(
       { error: 'Failed to create checkout session' },
       { status: 500 }

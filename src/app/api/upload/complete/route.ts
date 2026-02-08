@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
 import {
   getUploadSession,
@@ -20,7 +20,6 @@ import { validateFileIntegrity } from '@/lib/upload/validation';
 import { CompleteUploadResponse } from '@/lib/upload/types';
 import { AuditAction } from '@prisma/client';
 import fs from 'fs/promises';
-import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   let uploadId: string | undefined;
@@ -30,16 +29,6 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const limitResult = await applyRateLimit(request, {
-      config: RATE_LIMIT_CONFIGS.UPLOAD_FILE,
-      byUser: true,
-      byIp: false,
-      message: 'Upload completion rate limit exceeded. Please try again later.',
-    });
-    if (!limitResult.allowed) {
-      return limitResult.response;
     }
 
     // Parse request body
@@ -54,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get upload session
-    const session = await getUploadSession(uploadId);
+    const session = getUploadSession(uploadId);
     if (!session) {
       return NextResponse.json(
         { error: 'Upload session not found' },
@@ -83,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update status to processing
-    await updateUploadSession(uploadId, { status: 'PROCESSING' });
+    updateUploadSession(uploadId, { status: 'PROCESSING' });
 
     // Combine chunks into final file
     const finalFilePath = getFinalFilePath(uploadId, session.fileName);
@@ -141,11 +130,6 @@ export async function POST(request: NextRequest) {
         fileId: duplicate.id,
         storageKey: duplicate.storageKey,
         metadata: duplicate.metadata ? JSON.parse(duplicate.metadata) : {},
-        fileHash: duplicate.fileHash,
-        mimeType: duplicate.mimeType || undefined,
-        sequenceLength: duplicate.sequenceLength || undefined,
-        fps: duplicate.fps || undefined,
-        channelCount: duplicate.channelCount || undefined,
         deduplicated: true,
       };
 
@@ -172,40 +156,33 @@ export async function POST(request: NextRequest) {
         fileType: session.fileType,
         uploadId,
       },
-      fileType: session.fileType,
     });
 
-    let productFileId: string | null = null;
-
-    // Create ProductFile only if we have a versionId to attach it to
-    if (session.versionId) {
-      const productFile = await db.productFile.create({
-        data: {
-          versionId: session.versionId,
-          fileName: session.fileName,
-          originalName: session.fileName,
-          fileType: session.fileType,
-          fileSize: session.fileSize,
-          fileHash,
-          storageKey,
-          mimeType: session.mimeType,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-          sequenceLength: metadata?.sequenceLength,
-          fps: metadata?.fps,
-          channelCount: metadata?.channelCount,
-        },
-      });
-
-      productFileId = productFile.id;
-    }
+    // Create ProductFile record
+    const productFile = await db.productFile.create({
+      data: {
+        versionId: session.versionId || 'temp', // Will be linked later if temp
+        fileName: session.fileName,
+        originalName: session.fileName,
+        fileType: session.fileType,
+        fileSize: session.fileSize,
+        fileHash,
+        storageKey,
+        mimeType: session.mimeType,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+        sequenceLength: metadata?.sequenceLength,
+        fps: metadata?.fps,
+        channelCount: metadata?.channelCount,
+      },
+    });
 
     // Log to audit trail
     await db.auditLog.create({
       data: {
         userId: user.id,
         action: AuditAction.FILE_UPLOADED,
-        entityType: productFileId ? 'product_file' : 'upload_file',
-        entityId: productFileId || storageKey,
+        entityType: 'product_file',
+        entityId: productFile.id,
         metadata: JSON.stringify({
           fileName: session.fileName,
           fileSize: session.fileSize,
@@ -213,27 +190,23 @@ export async function POST(request: NextRequest) {
           fileHash,
           storageKey,
           hasMetadata: !!metadata,
-          linkedToVersion: Boolean(session.versionId),
         }),
         ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
         userAgent: request.headers.get('user-agent'),
       },
     });
 
-    // Mark session complete then clean up
-    await updateUploadSession(uploadId, { status: 'COMPLETED' });
+    // Clean up upload session
     await deleteUploadSession(uploadId);
 
+    // Update session status
+    updateUploadSession(uploadId, { status: 'COMPLETED' });
+
     const response: CompleteUploadResponse = {
-      fileId: productFileId || undefined,
+      fileId: productFile.id,
       storageKey,
       metadata: metadata || {},
       deduplicated: false,
-      fileHash,
-      mimeType: session.mimeType,
-      sequenceLength: metadata?.sequenceLength,
-      fps: metadata?.fps,
-      channelCount: metadata?.channelCount,
     };
 
     return NextResponse.json(response);

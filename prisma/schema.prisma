@@ -1,4 +1,5 @@
-// SequenceHUB.com - Database Schema (Supabase Auth aligned)
+// SequenceHUB.com - Database Schema
+// Marketplace for xLights sequences with comprehensive security and versioning support
 
 generator client {
   provider = "prisma-client-js"
@@ -10,16 +11,85 @@ datasource db {
 }
 
 // ============================================
-// ENUMS (mapped to Supabase enums)
+// USER MANAGEMENT & AUTHENTICATION
 // ============================================
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  name              String?
+  emailVerified     Boolean  @default(false)
+  avatar            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Onboarding tracking
+  onboardingCompleted Boolean  @default(false)
+  onboardingStep      Int      @default(0)
+  onboardingData      String?  // JSON for progress tracking
+
+  // Legal acceptance tracking
+  tosAcceptedAt         DateTime?
+  tosVersion            String?
+  privacyAcceptedAt     DateTime?
+  privacyVersion        String?
+  sellerTermsAcceptedAt DateTime?
+  sellerTermsVersion    String?
+
+  // Relations
+  profile           Profile?
+  roles             UserRole[]
+  creatorAccount    CreatorAccount?
+  products          Product[]
+  orders            Order[]
+  entitlements      Entitlement[]
+  auditLogs         AuditLog[]
+  downloadTokens    DownloadToken[]
+  legalAcceptances  LegalAcceptance[]
+}
+
+model Profile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  displayName     String
+  bio             String?
+  website         String?
+  socialTwitter  String?
+  socialYouTube   String?
+  socialInstagram String?
+  location        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
 
 enum Role {
   ADMIN
   CREATOR
   BUYER
-
-  @@map("user_role")
 }
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  role      Role
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+}
+
+// ============================================
+// CREATOR & STRIPE CONNECT
+// ============================================
 
 enum OnboardingStatus {
   PENDING
@@ -27,26 +97,44 @@ enum OnboardingStatus {
   COMPLETED
   REJECTED
   SUSPENDED
-
-  @@map("onboarding_status")
 }
+
+model CreatorAccount {
+  id                  String           @id @default(cuid())
+  userId              String           @unique
+  stripeAccountId     String?          @unique
+  stripeAccountStatus String?          // Stripe Connect account status
+  onboardingStatus    OnboardingStatus  @default(PENDING)
+  platformFeePercent  Float            @default(10.0) // 10% platform fee
+  totalRevenue        Float            @default(0)
+  totalSales          Int              @default(0)
+  payoutSchedule      String           @default("manual") // manual, daily, weekly, monthly
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stripeAccountId])
+}
+
+// ============================================
+// PRODUCTS & VERSIONING
+// ============================================
 
 enum ProductStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
   SUSPENDED
-
-  @@map("product_status")
 }
 
 enum FileType {
-  SOURCE
-  RENDERED
-  ASSET
-  PREVIEW
-
-  @@map("file_type")
+  SOURCE      // XSQ/XML project files
+  RENDERED    // FSEQ playback files
+  ASSET       // Images, audio, other assets
+  PREVIEW     // Video, GIF previews
 }
 
 enum ProductCategory {
@@ -59,15 +147,169 @@ enum ProductCategory {
   PROP
   FACEBOOK
   OTHER
-
-  @@map("product_category")
 }
 
 enum LicenseType {
   PERSONAL
   COMMERCIAL
+}
 
-  @@map("license_type")
+model Product {
+  id               String         @id @default(cuid())
+  slug             String         @unique
+  creatorId        String
+  title            String
+  description      String         // Markdown
+  category         ProductCategory
+  status           ProductStatus  @default(DRAFT)
+  licenseType      LicenseType    @default(PERSONAL)
+  seatCount        Int?           // For commercial licenses
+  
+  // xLights-specific metadata
+  xLightsVersionMin String?
+  xLightsVersionMax String?
+  targetUse        String?        // "Christmas", "Halloween", "Pixel tree", etc.
+  expectedProps    String?        // Freeform notes about expected props/models
+  includesFSEQ     Boolean        @default(false)
+  includesSource   Boolean        @default(false)
+  
+  // SEO
+  metaTitle        String?
+  metaDescription  String?
+  metaKeywords     String?
+  
+  // Stats
+  viewCount        Int            @default(0)
+  saleCount        Int            @default(0)
+  
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  creator          User           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  versions         ProductVersion[]
+  media            ProductMedia[]
+  tags             ProductTag[]
+  prices           Price[]
+  orderItems       OrderItem[]
+
+  @@index([creatorId])
+  @@index([slug])
+  @@index([status])
+  @@index([category])
+}
+
+model ProductVersion {
+  id              String   @id @default(cuid())
+  productId       String
+  versionNumber   Int
+  versionName     String   // e.g., "1.0.0", "v1", "2024 Edition"
+  changelog       String?  // Markdown
+  isLatest        Boolean  @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  files           ProductFile[]
+
+  @@unique([productId, versionNumber])
+  @@index([productId])
+  @@index([isLatest])
+}
+
+model ProductFile {
+  id              String   @id @default(cuid())
+  versionId       String
+  fileName        String
+  originalName    String
+  fileType        FileType
+  fileSize        Int      // in bytes
+  fileHash        String   // SHA256
+  storageKey      String   // Path in storage
+  mimeType        String?
+  
+  // File metadata (extracted during analysis)
+  metadata        String?  // JSON string with file-specific metadata
+  
+  // xLights-specific metadata (if applicable)
+  sequenceLength  Float?   // in seconds
+  fps             Int?
+  channelCount    Int?
+  
+  createdAt       DateTime @default(now())
+
+  // Relations
+  version         ProductVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@index([fileHash])
+}
+
+model ProductMedia {
+  id              String   @id @default(cuid())
+  productId       String
+  mediaType       String   // 'cover', 'gallery', 'preview'
+  fileName        String
+  originalName    String
+  fileSize        Int
+  fileHash        String
+  storageKey      String
+  mimeType        String?
+  width           Int?
+  height          Int?
+  altText         String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  // Relations
+  product         Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  // Relations
+  products  ProductTag[]
+}
+
+model ProductTag {
+  id        String   @id @default(cuid())
+  productId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  // Relations
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, tagId])
+  @@index([productId])
+  @@index([tagId])
+}
+
+// ============================================
+// PRICING & PAYMENTS
+// ============================================
+
+model Price {
+  id              String   @id @default(cuid())
+  productId       String
+  amount          Float    // in USD
+  currency        String   @default("USD")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
 }
 
 enum CheckoutStatus {
@@ -75,9 +317,33 @@ enum CheckoutStatus {
   COMPLETED
   EXPIRED
   CANCELLED
-
-  @@map("checkout_status")
 }
+
+model CheckoutSession {
+  id              String          @id @default(cuid())
+  sessionId       String          @unique // Stripe checkout session ID
+  userId          String?
+  productId       String
+  priceId         String
+  amount          Float
+  currency        String
+  status          CheckoutStatus  @default(PENDING)
+  successUrl      String?
+  cancelUrl       String?
+  metadata        String?         // JSON string for additional metadata
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+}
+
+// ============================================
+// ORDERS & ENTITLEMENTS
+// ============================================
 
 enum OrderStatus {
   PENDING
@@ -85,9 +351,132 @@ enum OrderStatus {
   CANCELLED
   REFUNDED
   PARTIALLY_REFUNDED
-
-  @@map("order_status")
 }
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  userId          String
+  totalAmount     Float
+  currency        String      @default("USD")
+  status          OrderStatus @default(PENDING)
+  paymentIntentId String?     @unique // Stripe payment intent ID
+  
+  // Refund tracking
+  refundedAmount  Float       @default(0)
+  refundedAt      DateTime?
+  
+  // UTM tracking for analytics
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  entitlements    Entitlement[]
+  auditLogs       AuditLog[]
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([paymentIntentId])
+}
+
+model OrderItem {
+  id              String   @id @default(cuid())
+  orderId         String
+  productId       String
+  versionId       String?
+  priceId         String
+  priceAtPurchase Float
+  currency        String
+  createdAt       DateTime @default(now())
+
+  // Relations
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Entitlement {
+  id              String   @id @default(cuid())
+  userId          String
+  orderId         String
+  productId       String
+  versionId       String
+  licenseType     LicenseType
+  isActive        Boolean  @default(true)
+  expiresAt       DateTime?
+  lastDownloadAt  DateTime?
+  downloadCount   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId, versionId])
+  @@index([userId])
+  @@index([orderId])
+  @@index([productId])
+  @@index([isActive])
+}
+
+// ============================================
+// DOWNLOADS & ACCESS CONTROL
+// ============================================
+
+model DownloadToken {
+  id              String   @id @default(cuid())
+  userId          String
+  entitlementId   String
+  fileId          String?
+  token           String   @unique // Single-use token
+  expiresAt       DateTime
+  usedAt          DateTime?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([entitlementId])
+  @@index([expiresAt])
+}
+
+model AccessLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  entitlementId   String?
+  fileId          String?
+  token           String?
+  action          String   // 'download_attempt', 'download_success', 'download_denied', 'token_used'
+  ipAddress       String?
+  userAgent       String?
+  success         Boolean
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([entitlementId])
+  @@index([ipAddress])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============================================
+// AUDIT LOGS & SECURITY
+// ============================================
 
 enum AuditAction {
   USER_LOGIN
@@ -124,560 +513,76 @@ enum AuditAction {
   SECURITY_ALERT
   DOWNLOAD_TOKEN_CREATED
   DOWNLOAD_ACCESS_DENIED
-
-  @@map("audit_action")
+  LEGAL_ACCEPTED
+  ONBOARDING_STARTED
+  ONBOARDING_STEP_COMPLETED
+  ONBOARDING_COMPLETED
 }
-
-enum UploadStatus {
-  INITIATED
-  UPLOADING
-  ALL_CHUNKS_UPLOADED
-  PROCESSING
-  COMPLETED
-  ABORTED
-  EXPIRED
-
-  @@map("upload_status")
-}
-
-enum LegalDocumentType {
-  TERMS_OF_SERVICE
-  PRIVACY_POLICY
-  REFUND_POLICY
-
-  @@map("legal_document_type")
-}
-
-enum SupportTicketStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-
-  @@map("support_ticket_status")
-}
-
-// ============================================
-// USER MANAGEMENT (Supabase Auth aligned)
-// ============================================
-
-model User {
-  id        String    @id @default(uuid()) @db.Uuid
-  email     String    @unique
-  name      String?
-  avatar    String?
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  // Relations
-  profile        Profile?
-  settings       UserSettings?
-  roles          UserRole[]
-  creatorAccount CreatorAccount?
-  products       Product[]
-  orders         Order[]
-  entitlements   Entitlement[]
-  auditLogs      AuditLog[]
-  downloadTokens DownloadToken[]
-  uploadSessions UploadSession[]
-  legalAcceptances LegalAcceptance[]
-  supportTickets SupportTicket[]
-
-  @@map("users")
-}
-
-model Profile {
-  id             String   @id @default(uuid()) @db.Uuid
-  userId         String   @unique @db.Uuid @map("user_id")
-  displayName    String   @map("display_name")
-  bio            String?
-  website        String?
-  socialTwitter  String?  @map("social_twitter")
-  socialYouTube  String?  @map("social_youtube")
-  socialInstagram String? @map("social_instagram")
-  location       String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("profiles")
-}
-
-model UserRole {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid @map("user_id")
-  role      Role
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, role])
-  @@index([userId])
-  @@map("user_roles")
-}
-
-model UserSettings {
-  userId               String   @id @db.Uuid @map("user_id")
-  businessName         String?  @map("business_name")
-  supportEmail         String?  @map("support_email")
-  notificationEmail    String?  @map("notification_email")
-  timezone             String   @default("UTC")
-  currency             String   @default("USD")
-  dashboardDefaultView String   @default("overview") @map("dashboard_default_view")
-  productsPageSize     Int      @default(25) @map("products_page_size")
-  themePreference      String   @default("system") @map("theme_preference")
-  notifyNewOrder       Boolean  @default(true) @map("notify_new_order")
-  notifyPayouts        Boolean  @default(true) @map("notify_payouts")
-  notifyComments       Boolean  @default(false) @map("notify_comments")
-  notifySystem         Boolean  @default(true) @map("notify_system")
-  marketingOptIn       Boolean  @default(false) @map("marketing_opt_in")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([dashboardDefaultView])
-  @@index([updatedAt])
-  @@map("user_settings")
-}
-
-// ============================================
-// CREATOR & STRIPE CONNECT
-// ============================================
-
-model CreatorAccount {
-  id                  String           @id @default(uuid()) @db.Uuid
-  userId              String           @unique @db.Uuid @map("user_id")
-  stripeAccountId     String?          @unique @map("stripe_account_id")
-  stripeAccountStatus String?          @map("stripe_account_status")
-  onboardingStatus    OnboardingStatus @default(PENDING) @map("onboarding_status")
-  platformFeePercent  Float            @default(10.0) @map("platform_fee_percent")
-  totalRevenue        Float            @default(0) @map("total_revenue")
-  totalSales          Int              @default(0) @map("total_sales")
-  payoutSchedule      String           @default("manual") @map("payout_schedule")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([stripeAccountId])
-  @@map("creator_accounts")
-}
-
-// ============================================
-// PRODUCTS & VERSIONING
-// ============================================
-
-model Product {
-  id               String         @id @default(uuid()) @db.Uuid
-  slug             String         @unique
-  creatorId        String         @db.Uuid @map("creator_id")
-  title            String
-  description      String
-  category         ProductCategory
-  status           ProductStatus  @default(DRAFT)
-  licenseType      LicenseType    @default(PERSONAL) @map("license_type")
-  seatCount        Int?           @map("seat_count")
-
-  xLightsVersionMin String?       @map("xlights_version_min")
-  xLightsVersionMax String?       @map("xlights_version_max")
-  targetUse         String?       @map("target_use")
-  expectedProps     String?       @map("expected_props")
-  includesFSEQ      Boolean       @default(false) @map("includes_fseq")
-  includesSource    Boolean       @default(false) @map("includes_source")
-
-  metaTitle       String?         @map("meta_title")
-  metaDescription String?         @map("meta_description")
-  metaKeywords    String?         @map("meta_keywords")
-
-  viewCount       Int             @default(0) @map("view_count")
-  saleCount       Int             @default(0) @map("sale_count")
-
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-
-  creator         User            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  versions        ProductVersion[]
-  media           ProductMedia[]
-  tags            ProductTag[]
-  prices          Price[]
-  orderItems      OrderItem[]
-
-  @@index([creatorId])
-  @@index([slug])
-  @@index([status])
-  @@index([category])
-  @@map("products")
-}
-
-model ProductVersion {
-  id            String   @id @default(uuid()) @db.Uuid
-  productId     String   @db.Uuid @map("product_id")
-  versionNumber Int      @map("version_number")
-  versionName   String   @map("version_name")
-  changelog     String?
-  isLatest      Boolean  @default(false) @map("is_latest")
-  publishedAt   DateTime? @map("published_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  files   ProductFile[]
-
-  @@unique([productId, versionNumber])
-  @@index([productId])
-  @@index([isLatest])
-  @@map("product_versions")
-}
-
-model ProductFile {
-  id            String   @id @default(uuid()) @db.Uuid
-  versionId     String   @db.Uuid @map("version_id")
-  fileName      String   @map("file_name")
-  originalName  String   @map("original_name")
-  fileType      FileType @map("file_type")
-  fileSize      Int      @map("file_size")
-  fileHash      String   @map("file_hash")
-  storageKey    String   @map("storage_key")
-  mimeType      String?  @map("mime_type")
-  metadata      Json?
-  sequenceLength Float?  @map("sequence_length")
-  fps           Int?
-  channelCount  Int?     @map("channel_count")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  version ProductVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-
-  @@index([versionId])
-  @@index([fileHash])
-  @@map("product_files")
-}
-
-model ProductMedia {
-  id          String   @id @default(uuid()) @db.Uuid
-  productId   String   @db.Uuid @map("product_id")
-  mediaType   String   @map("media_type")
-  fileName    String   @map("file_name")
-  originalName String  @map("original_name")
-  fileSize    Int      @map("file_size")
-  fileHash    String   @map("file_hash")
-  storageKey  String   @map("storage_key")
-  mimeType    String?  @map("mime_type")
-  width       Int?
-  height      Int?
-  altText     String?  @map("alt_text")
-  displayOrder Int     @default(0) @map("display_order")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@map("product_media")
-}
-
-model Tag {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @unique
-  slug      String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
-
-  products ProductTag[]
-
-  @@map("tags")
-}
-
-model ProductTag {
-  id        String   @id @default(uuid()) @db.Uuid
-  productId String   @db.Uuid @map("product_id")
-  tagId     String   @db.Uuid @map("tag_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@unique([productId, tagId])
-  @@index([productId])
-  @@index([tagId])
-  @@map("product_tags")
-}
-
-// ============================================
-// PRICING & PAYMENTS
-// ============================================
-
-model Price {
-  id        String   @id @default(uuid()) @db.Uuid
-  productId String   @db.Uuid @map("product_id")
-  amount    Float
-  currency  String   @default("USD")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@map("prices")
-}
-
-model CheckoutSession {
-  id         String         @id @default(uuid()) @db.Uuid
-  sessionId  String         @unique @map("session_id")
-  userId     String?        @db.Uuid @map("user_id")
-  productId  String         @db.Uuid @map("product_id")
-  priceId    String         @db.Uuid @map("price_id")
-  amount     Float
-  currency   String
-  status     CheckoutStatus @default(PENDING)
-  successUrl String?        @map("success_url")
-  cancelUrl  String?        @map("cancel_url")
-  metadata   Json?
-  expiresAt  DateTime?      @map("expires_at")
-  createdAt  DateTime       @default(now()) @map("created_at")
-  updatedAt  DateTime       @updatedAt @map("updated_at")
-
-  @@index([sessionId])
-  @@index([userId])
-  @@index([productId])
-  @@index([status])
-  @@map("checkout_sessions")
-}
-
-// ============================================
-// ORDERS & ENTITLEMENTS
-// ============================================
-
-model Order {
-  id              String      @id @default(uuid()) @db.Uuid
-  orderNumber     String      @unique @map("order_number")
-  userId          String      @db.Uuid @map("user_id")
-  totalAmount     Float       @map("total_amount")
-  currency        String      @default("USD")
-  status          OrderStatus @default(PENDING)
-  paymentIntentId String?     @unique @map("payment_intent_id")
-  refundedAmount  Float       @default(0) @map("refunded_amount")
-  refundedAt      DateTime?   @map("refunded_at")
-  utmSource       String?     @map("utm_source")
-  utmMedium       String?     @map("utm_medium")
-  utmCampaign     String?     @map("utm_campaign")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items        OrderItem[]
-  entitlements Entitlement[]
-  auditLogs    AuditLog[]
-
-  @@index([userId])
-  @@index([orderNumber])
-  @@index([status])
-  @@index([paymentIntentId])
-  @@map("orders")
-}
-
-model OrderItem {
-  id              String   @id @default(uuid()) @db.Uuid
-  orderId         String   @db.Uuid @map("order_id")
-  productId       String   @db.Uuid @map("product_id")
-  versionId       String?  @db.Uuid @map("version_id")
-  priceId         String   @db.Uuid @map("price_id")
-  priceAtPurchase Float    @map("price_at_purchase")
-  currency        String
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@index([productId])
-  @@map("order_items")
-}
-
-model Entitlement {
-  id             String      @id @default(uuid()) @db.Uuid
-  userId         String      @db.Uuid @map("user_id")
-  orderId        String      @db.Uuid @map("order_id")
-  productId      String      @db.Uuid @map("product_id")
-  versionId      String      @db.Uuid @map("version_id")
-  licenseType    LicenseType @map("license_type")
-  isActive       Boolean     @default(true) @map("is_active")
-  expiresAt      DateTime?   @map("expires_at")
-  lastDownloadAt DateTime?   @map("last_download_at")
-  downloadCount  Int         @default(0) @map("download_count")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, productId, versionId])
-  @@index([userId])
-  @@index([orderId])
-  @@index([productId])
-  @@index([isActive])
-  @@map("entitlements")
-}
-
-// ============================================
-// DOWNLOADS & ACCESS CONTROL
-// ============================================
-
-model DownloadToken {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @db.Uuid @map("user_id")
-  entitlementId String   @db.Uuid @map("entitlement_id")
-  fileId        String?  @db.Uuid @map("file_id")
-  token         String   @unique
-  expiresAt     DateTime @map("expires_at")
-  usedAt        DateTime? @map("used_at")
-  ipAddress     String?  @map("ip_address")
-  userAgent     String?  @map("user_agent")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([token])
-  @@index([userId])
-  @@index([entitlementId])
-  @@index([expiresAt])
-  @@map("download_tokens")
-}
-
-model UploadSession {
-  id             String       @id @default(uuid()) @db.Uuid
-  userId         String       @db.Uuid @map("user_id")
-  fileName       String       @map("file_name")
-  fileSize       Int          @map("file_size")
-  fileType       FileType     @map("file_type")
-  mimeType       String       @map("mime_type")
-  chunkSize      Int          @map("chunk_size")
-  totalChunks    Int          @map("total_chunks")
-  uploadedChunks Json         @map("uploaded_chunks")
-  status         UploadStatus @map("status")
-  productId      String?      @db.Uuid @map("product_id")
-  versionId      String?      @db.Uuid @map("version_id")
-  expiresAt      DateTime     @map("expires_at")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([expiresAt])
-  @@map("upload_sessions")
-}
-
-// ============================================
-// LEGAL
-// ============================================
-
-model LegalDocument {
-  id              String            @id @default(uuid()) @db.Uuid
-  type            LegalDocumentType
-  version         String
-  title           String
-  contentMarkdown String            @map("content_markdown")
-  effectiveAt     DateTime          @map("effective_at")
-  publishedAt     DateTime?         @map("published_at")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
-
-  acceptances LegalAcceptance[]
-
-  @@unique([type, version])
-  @@index([type, publishedAt])
-  @@map("legal_documents")
-}
-
-model LegalAcceptance {
-  id              String            @id @default(uuid()) @db.Uuid
-  userId          String            @db.Uuid @map("user_id")
-  documentId      String            @db.Uuid @map("document_id")
-  documentType    LegalDocumentType @map("document_type")
-  documentVersion String            @map("document_version")
-  acceptedAt      DateTime          @default(now()) @map("accepted_at")
-  ipAddress       String?           @map("ip_address")
-  userAgent       String?           @map("user_agent")
-  createdAt       DateTime          @default(now()) @map("created_at")
-
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  document LegalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, documentId])
-  @@index([userId, acceptedAt])
-  @@index([documentId])
-  @@map("legal_acceptances")
-}
-
-model SupportTicket {
-  id          String              @id @default(uuid()) @db.Uuid
-  sellerId    String              @db.Uuid @map("seller_id")
-  category    String
-  subject     String
-  description String
-  status      SupportTicketStatus @default(OPEN)
-  orderId     String?             @db.Uuid @map("order_id")
-  productId   String?             @db.Uuid @map("product_id")
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
-
-  seller User @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-
-  @@index([sellerId, status])
-  @@index([orderId])
-  @@index([productId])
-  @@index([createdAt])
-  @@map("support_tickets")
-}
-
-model AccessLog {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String?  @db.Uuid @map("user_id")
-  entitlementId String?  @db.Uuid @map("entitlement_id")
-  fileId        String?  @db.Uuid @map("file_id")
-  token         String?
-  action        String
-  ipAddress     String?  @map("ip_address")
-  userAgent     String?  @map("user_agent")
-  success       Boolean
-  errorMessage  String?  @map("error_message")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  @@index([userId])
-  @@index([entitlementId])
-  @@index([ipAddress])
-  @@index([action])
-  @@index([createdAt])
-  @@map("access_logs")
-}
-
-// ============================================
-// AUDIT LOGS
-// ============================================
 
 model AuditLog {
-  id         String      @id @default(uuid()) @db.Uuid
-  userId     String?     @db.Uuid @map("user_id")
-  orderId    String?     @db.Uuid @map("order_id")
-  action     AuditAction
-  entityType String?     @map("entity_type")
-  entityId   String?     @map("entity_id")
-  changes    Json?
-  metadata   Json?
-  ipAddress  String?     @map("ip_address")
-  userAgent  String?     @map("user_agent")
-  createdAt  DateTime    @default(now()) @map("created_at")
+  id              String      @id @default(cuid())
+  userId          String?
+  orderId         String?
+  action          AuditAction
+  entityType      String?     // 'user', 'product', 'order', etc.
+  entityId        String?
+  changes         String?     // JSON string of changes made
+  metadata        String?     // JSON string for additional context
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime    @default(now())
 
-  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
-  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  // Relations
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order           Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([orderId])
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
-  @@map("audit_logs")
+}
+
+// ============================================
+// LEGAL DOCUMENTS & ACCEPTANCE
+// ============================================
+
+enum LegalDocType {
+  TERMS_OF_SERVICE
+  PRIVACY_POLICY
+  SELLER_AGREEMENT
+  REFUND_POLICY
+  COOKIE_POLICY
+}
+
+model LegalDocument {
+  id            String       @id @default(cuid())
+  type          LegalDocType
+  version       String
+  title         String
+  content       String       // Markdown content
+  effectiveDate DateTime
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([type, version])
+  @@index([type, isActive])
+}
+
+model LegalAcceptance {
+  id              String       @id @default(cuid())
+  userId          String
+  documentType    LegalDocType
+  documentVersion String
+  ipAddress       String?
+  userAgent       String?
+  acceptedAt      DateTime     @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, documentType, documentVersion])
+  @@index([userId])
+  @@index([documentType])
 }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/supabase/auth';
-import { generateDownloadUrl } from '@/lib/storage';
+import { getCurrentUser } from '@/lib/auth';;
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +9,6 @@ export async function GET(
   try {
     const { slug } = params;
     const user = await getCurrentUser();
-    const isAdmin = Boolean(user?.roles?.some((role) => role.role === 'ADMIN'));
 
     // Fetch product
     const product = await db.product.findUnique({
@@ -56,14 +54,6 @@ export async function GET(
       );
     }
 
-    const isOwner = Boolean(user && product.creatorId === user.id);
-    if (product.status !== 'PUBLISHED' && !isOwner && !isAdmin) {
-      return NextResponse.json(
-        { error: 'Product not found' },
-        { status: 404 }
-      );
-    }
-
     // Check if user has purchased this product
     let purchased = false;
     if (user) {
@@ -88,18 +78,6 @@ export async function GET(
     });
 
     // Transform data
-    const mediaWithUrls = await Promise.all(
-      product.media.map(async (media) => {
-        try {
-          const url = await generateDownloadUrl(media.storageKey, 3600, 'PREVIEW');
-          return { ...media, url };
-        } catch (err) {
-          console.warn('Failed to generate media URL:', err);
-          return { ...media, url: null };
-        }
-      })
-    );
-
     const transformedProduct = {
       id: product.id,
       slug: product.slug,
@@ -116,7 +94,7 @@ export async function GET(
       licenseType: product.licenseType,
       seatCount: product.seatCount,
       creator: product.creator,
-      media: mediaWithUrls,
+      media: product.media,
       versions: product.versions,
       files: product.files.map((file) => ({
         id: file.id,

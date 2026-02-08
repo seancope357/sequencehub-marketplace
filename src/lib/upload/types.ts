@@ -35,15 +35,10 @@ export interface ChunkUploadResponse {
 }
 
 export interface CompleteUploadResponse {
-  fileId?: string | null;
+  fileId: string;
   storageKey: string;
   metadata: Record<string, any>;
   deduplicated: boolean;
-  fileHash?: string;
-  mimeType?: string;
-  sequenceLength?: number;
-  fps?: number;
-  channelCount?: number;
 }
 
 export interface UploadSession {
@@ -134,16 +129,8 @@ export const FILE_TYPE_CONFIGS: Record<FileType, FileUploadConfig> = {
   },
   PREVIEW: {
     maxFileSize: 200 * 1024 * 1024, // 200MB
-    allowedExtensions: ['.mp4', '.webm', '.mov', '.gif', '.jpg', '.jpeg', '.png', '.webp'],
-    allowedMimeTypes: [
-      'video/mp4',
-      'video/webm',
-      'video/quicktime',
-      'image/gif',
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-    ],
+    allowedExtensions: ['.mp4', '.webm', '.mov', '.gif'],
+    allowedMimeTypes: ['video/mp4', 'video/webm', 'video/quicktime', 'image/gif'],
     validateMagicBytes: false,
   },
 };

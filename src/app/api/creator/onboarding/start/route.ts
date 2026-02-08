@@ -5,19 +5,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { isCreatorOrAdmin } from '@/lib/auth-utils';
-import { getCurrentUser, createAuditLog, assignRole } from '@/lib/supabase/auth';
-import { getStripeConfigStatus, initializeCreatorAccount } from '@/lib/stripe-connect';
+import { getCurrentUser, createAuditLog } from '@/lib/auth';;
+import { initializeCreatorAccount } from '@/lib/stripe-connect';
 
 export async function POST(request: NextRequest) {
   try {
-    const stripeConfig = getStripeConfigStatus();
-    if (!stripeConfig.configured) {
-      return NextResponse.json(
-        { error: stripeConfig.message || 'Stripe Connect is not configured.' },
-        { status: 409 }
-      );
-    }
-
     // 1. Authenticate user
     const user = await getCurrentUser();
     if (!user) {
@@ -27,15 +19,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Ensure user can become a creator
+    // 2. Verify user has CREATOR role
     if (!isCreatorOrAdmin(user)) {
-      const { error } = await assignRole(user.id, 'CREATOR');
-      if (error) {
-        return NextResponse.json(
-          { error: 'Failed to enable creator role' },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json(
+        { error: 'Forbidden - Creator role required' },
+        { status: 403 }
+      );
     }
 
     // 3. Initialize Stripe Connect account

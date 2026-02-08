@@ -8,11 +8,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './vitest.setup.ts',
-    include: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
-    exclude: ['tests/e2e/**'],
+    include: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'server-only': path.resolve(__dirname, './src/test/shims/server-only.ts'),
     },
   },
 });

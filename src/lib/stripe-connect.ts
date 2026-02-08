@@ -7,57 +7,11 @@ import Stripe from 'stripe';
 import { db } from '@/lib/db';
 import { OnboardingStatus } from '@prisma/client';
 
-const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2024-12-18.acacia';
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+  apiVersion: '2024-12-18.acacia',
+});
 
-let stripeClient: Stripe | null = null;
-let stripeKeyCached: string | null = null;
-
-export class StripeConfigError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'StripeConfigError';
-  }
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_BASE_URL) {
-    return process.env.NEXT_PUBLIC_BASE_URL;
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  return 'http://localhost:3000';
-}
-
-export function getStripeConfigStatus(): {
-  configured: boolean;
-  message?: string;
-  baseUrl: string;
-} {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    return {
-      configured: false,
-      message: 'Stripe Connect is not configured for this environment.',
-      baseUrl: getBaseUrl(),
-    };
-  }
-
-  return { configured: true, baseUrl: getBaseUrl() };
-}
-
-function getStripeClient(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
-    throw new StripeConfigError('Stripe Connect is not configured for this environment.');
-  }
-
-  if (!stripeClient || stripeKeyCached !== key) {
-    stripeClient = new Stripe(key, { apiVersion: STRIPE_API_VERSION });
-    stripeKeyCached = key;
-  }
-
-  return stripeClient;
-}
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
 /**
  * Create a Stripe Connect Express account for a creator
@@ -65,7 +19,6 @@ function getStripeClient(): Stripe {
  */
 export async function createConnectedAccount(userId: string, email: string): Promise<Stripe.Account> {
   try {
-    const stripe = getStripeClient();
     // Create Express account using V2 API format
     // NOTE: Do NOT use top-level 'type' parameter - use controller.stripe_dashboard.type instead
     const account = await stripe.accounts.create({
@@ -107,12 +60,10 @@ export async function createConnectedAccount(userId: string, email: string): Pro
  */
 export async function createAccountOnboardingLink(stripeAccountId: string): Promise<string> {
   try {
-    const stripe = getStripeClient();
-    const baseUrl = getBaseUrl();
     const accountLink = await stripe.accountLinks.create({
       account: stripeAccountId,
-      refresh_url: `${baseUrl}/dashboard/creator/onboarding?refresh=true`,
-      return_url: `${baseUrl}/dashboard/creator/onboarding?success=true`,
+      refresh_url: `${BASE_URL}/dashboard/creator/onboarding?refresh=true`,
+      return_url: `${BASE_URL}/dashboard/creator/onboarding?success=true`,
       type: 'account_onboarding',
     });
 
@@ -128,7 +79,6 @@ export async function createAccountOnboardingLink(stripeAccountId: string): Prom
  */
 export async function createExpressDashboardLink(stripeAccountId: string): Promise<string> {
   try {
-    const stripe = getStripeClient();
     const loginLink = await stripe.accounts.createLoginLink(stripeAccountId);
     return loginLink.url;
   } catch (error) {
@@ -148,7 +98,6 @@ export async function getAccountStatus(stripeAccountId: string): Promise<{
   capabilitiesActive: boolean;
 }> {
   try {
-    const stripe = getStripeClient();
     const account = await stripe.accounts.retrieve(stripeAccountId);
 
     const isComplete = Boolean(

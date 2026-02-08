@@ -4,25 +4,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, createAuditLog } from '@/lib/supabase/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
+import { getCurrentUser, createAuditLog } from '@/lib/auth';;
 import { db } from '@/lib/db';
-import {
-  createExpressDashboardLink,
-  getAccountStatus,
-  getStripeConfigStatus,
-  updateCreatorAccountStatus,
-} from '@/lib/stripe-connect';
+import { createExpressDashboardLink } from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
-    const stripeConfig = getStripeConfigStatus();
-    if (!stripeConfig.configured) {
-      return NextResponse.json(
-        { error: stripeConfig.message || 'Stripe Connect is not configured.' },
-        { status: 409 }
-      );
-    }
-
     // 1. Authenticate user
     const user = await getCurrentUser();
     if (!user) {
@@ -32,7 +20,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 2. Get creator account
+    // 2. Verify user has CREATOR role
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - Creator role required' },
+        { status: 403 }
+      );
+    }
+
+    // 3. Get creator account
     const creatorAccount = await db.creatorAccount.findUnique({
       where: { userId: user.id },
     });
@@ -44,30 +40,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 3. If onboarding is not marked complete, verify with Stripe before blocking.
+    // 4. Check if onboarding is complete
     if (creatorAccount.onboardingStatus !== 'COMPLETED') {
-      try {
-        const { account, isComplete } = await getAccountStatus(creatorAccount.stripeAccountId);
-        if (!isComplete) {
-          return NextResponse.json(
-            { error: 'Onboarding not complete - finish setup first' },
-            { status: 400 }
-          );
-        }
-        await updateCreatorAccountStatus(creatorAccount.stripeAccountId, account);
-      } catch (stripeError) {
-        console.warn('Failed to verify Stripe onboarding status:', stripeError);
-        return NextResponse.json(
-          { error: 'Unable to verify Stripe account status. Please try again.' },
-          { status: 503 }
-        );
-      }
+      return NextResponse.json(
+        { error: 'Onboarding not complete - finish setup first' },
+        { status: 400 }
+      );
     }
 
-    // 4. Generate Express Dashboard link
+    // 5. Generate Express Dashboard link
     const dashboardUrl = await createExpressDashboardLink(creatorAccount.stripeAccountId);
 
-    // 5. Log dashboard access
+    // 6. Log dashboard access
     await createAuditLog({
       userId: user.id,
       action: 'STRIPE_DASHBOARD_ACCESSED',
@@ -80,7 +64,7 @@ export async function GET(request: NextRequest) {
       userAgent: request.headers.get('user-agent') || undefined,
     });
 
-    // 6. Return dashboard URL
+    // 7. Return dashboard URL
     return NextResponse.json(
       {
         success: true,

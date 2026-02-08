@@ -1,35 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAuditLog } from '@/lib/supabase/auth';
-import { createRouteHandlerClient, applyCookieChanges } from '@/lib/supabase/route-handler';
+import { getCurrentUser, clearAuthCookie, createAuditLog } from '@/lib/auth';;
 
 export async function POST(request: NextRequest) {
   try {
-    const { supabase, cookieChanges } = createRouteHandlerClient(request);
-    const { data } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
-
-    if (data.user) {
+    if (user) {
+      // Create audit log
       await createAuditLog({
-        userId: data.user.id,
+        userId: user.id,
         action: 'USER_LOGOUT',
         entityType: 'user',
-        entityId: data.user.id,
+        entityId: user.id,
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
+        userAgent: request.headers.get('user-agent') || undefined,
       });
     }
 
-    const response = NextResponse.json(
+    // Clear auth cookie
+    await clearAuthCookie();
+
+    return NextResponse.json(
       { message: 'Logged out successfully' },
       { status: 200 }
     );
-    applyCookieChanges(response, cookieChanges);
-    return response;
   } catch (error) {
     console.error('Logout error:', error);
     return NextResponse.json(

@@ -1,15 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthUser } from '@/lib/auth-types';
+import { AuthUser } from '@/lib/auth-utils';;
 
 interface AuthState {
   user: AuthUser | null;
   isLoading: boolean;
-  hasInitialized: boolean;
   setUser: (user: AuthUser | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
-  initialize: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -18,7 +16,6 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       isLoading: true,
-      hasInitialized: false,
 
       setUser: (user) => set({ user, isLoading: false }),
 
@@ -26,53 +23,26 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+          await fetch('/api/auth/logout', { method: 'POST' });
           set({ user: null, isLoading: false });
         } catch (error) {
           console.error('Logout error:', error);
-          set({ isLoading: false });
         }
       },
 
-      initialize: async () => {
-        if (get().hasInitialized) return;
-        set({ hasInitialized: true });
-        await get().refreshUser();
-      },
-
       refreshUser: async () => {
-        const currentUser = get().user;
         try {
-          if (!currentUser) {
-            set({ isLoading: true });
-          } else if (get().isLoading) {
-            set({ isLoading: false });
-          }
-
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 8000);
-
-          const response = await fetch('/api/auth/me', {
-            credentials: 'include',
-            cache: 'no-store',
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
+          set({ isLoading: true });
+          const response = await fetch('/api/auth/me');
           if (response.ok) {
             const data = await response.json();
             set({ user: data.user, isLoading: false });
-          } else if (response.status === 401 || response.status === 403) {
-            set({ user: null, isLoading: false });
           } else {
-            set({ isLoading: false });
+            set({ user: null, isLoading: false });
           }
         } catch (error) {
-          if (error instanceof DOMException && error.name === 'AbortError') {
-            console.warn('Refresh user request timed out');
-          } else {
-            console.error('Refresh user error:', error);
-          }
-          set({ isLoading: false });
+          console.error('Refresh user error:', error);
+          set({ user: null, isLoading: false });
         }
       },
     }),

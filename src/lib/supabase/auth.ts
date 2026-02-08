@@ -3,36 +3,43 @@
  * Replaces custom JWT authentication with Supabase Auth
  */
 
-import 'server-only';
+'use server';
 
 import { createServerClient, createAdminClient } from './client';
-import type { NextRequest } from 'next/server';
-import { createRouteHandlerClient } from './route-handler';
-import type { AuthUser, RoleName } from '@/lib/auth-types';
+import { UserRole } from '@prisma/client';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
-function buildFallbackAuthUser(authUser: SupabaseUser): AuthUser {
-  const fallbackName =
-    (authUser.user_metadata?.name as string | undefined) ||
-    authUser.email?.split('@')[0] ||
-    'User';
+// ============================================
+// TYPES
+// ============================================
 
-  const fallbackAvatar =
-    (authUser.user_metadata?.avatar as string | undefined) ||
-    (authUser.user_metadata?.picture as string | undefined) ||
-    undefined;
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  avatar?: string;
+  emailVerified: boolean;
+  roles: Role[];
+  profile?: Profile | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
-  return {
-    id: authUser.id,
-    email: authUser.email ?? '',
-    name: fallbackName,
-    avatar: fallbackAvatar,
-    emailVerified: authUser.email_confirmed_at !== null,
-    roles: [{ id: `fallback-role-${authUser.id}`, role: 'BUYER' }],
-    profile: null,
-    createdAt: authUser.created_at,
-    updatedAt: authUser.updated_at ?? authUser.created_at,
-  };
+export interface Role {
+  id: string;
+  role: UserRole;
+}
+
+export interface Profile {
+  id: string;
+  userId: string;
+  displayName: string;
+  bio?: string;
+  website?: string;
+  socialTwitter?: string;
+  socialYouTube?: string;
+  socialInstagram?: string;
+  location?: string;
 }
 
 // ============================================
@@ -64,58 +71,9 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     .single();
 
   if (userError || !userData) {
-    const ensured = await ensureUserRecord(user);
-    if (ensured) {
-      return ensured;
-    }
-    return buildFallbackAuthUser(user);
-  }
-
-  return {
-    id: user.id,
-    email: user.email!,
-    name: userData.name,
-    avatar: userData.avatar,
-    emailVerified: user.email_confirmed_at !== null,
-    roles: userData.roles || [],
-    profile: userData.profile || null,
-    createdAt: userData.created_at,
-    updatedAt: userData.updated_at
-  };
-}
-
-/**
- * Get current user for Route Handlers using request cookies.
- */
-export async function getCurrentUserFromRequest(
-  request: NextRequest
-): Promise<AuthUser | null> {
-  const { supabase } = createRouteHandlerClient(request);
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) {
     return null;
   }
 
-  // Reuse existing logic for profile lookup and fallback
-  const { data: userData, error: userError } = await supabase
-    .from('users')
-    .select(`
-      *,
-      roles:user_roles(id, role),
-      profile:profiles(*)
-    `)
-    .eq('id', user.id)
-    .single();
-
-  if (userError || !userData) {
-    const ensured = await ensureUserRecord(user);
-    if (ensured) {
-      return ensured;
-    }
-    return buildFallbackAuthUser(user);
-  }
-
   return {
     id: user.id,
     email: user.email!,
@@ -127,63 +85,6 @@ export async function getCurrentUserFromRequest(
     createdAt: userData.created_at,
     updatedAt: userData.updated_at
   };
-}
-
-/**
- * Ensure public.users and default role exist for a Supabase Auth user.
- * This is a safety net if the DB trigger wasn't applied or failed.
- */
-export async function ensureUserRecord(
-  authUser: SupabaseUser
-): Promise<AuthUser | null> {
-  let admin: ReturnType<typeof createAdminClient>;
-  try {
-    admin = createAdminClient();
-  } catch (error) {
-    console.warn('Service role key unavailable, using fallback auth user shape');
-    return buildFallbackAuthUser(authUser);
-  }
-
-  const name =
-    (authUser.user_metadata?.name as string | undefined) ||
-    authUser.email?.split('@')[0] ||
-    'User';
-
-  const avatar =
-    (authUser.user_metadata?.avatar as string | undefined) ||
-    (authUser.user_metadata?.picture as string | undefined) ||
-    null;
-
-  const { error: userError } = await admin
-    .from('users')
-    .upsert(
-      {
-        id: authUser.id,
-        email: authUser.email,
-        name,
-        avatar,
-      },
-      { onConflict: 'id' }
-    );
-
-  if (userError) {
-    console.error('Failed to upsert user record:', userError);
-    return buildFallbackAuthUser(authUser);
-  }
-
-  const { error: roleError } = await admin
-    .from('user_roles')
-    .upsert(
-      { user_id: authUser.id, role: 'BUYER' },
-      { onConflict: 'user_id,role' }
-    );
-
-  if (roleError) {
-    console.error('Failed to upsert user role:', roleError);
-  }
-
-  const ensuredUser = await getUserById(authUser.id);
-  return ensuredUser ?? buildFallbackAuthUser(authUser);
 }
 
 /**
@@ -343,7 +244,7 @@ export async function updatePassword(newPassword: string): Promise<{ error: stri
  * Check if user has a specific role
  * Replaces: hasRole() from old auth.ts
  */
-export function hasRole(user: AuthUser | null, role: RoleName): boolean {
+export function hasRole(user: AuthUser | null, role: UserRole): boolean {
   if (!user) return false;
   return user.roles.some((r) => r.role === role);
 }
@@ -378,7 +279,7 @@ export function isCreatorOrAdmin(user: AuthUser | null): boolean {
  */
 export async function assignRole(
   userId: string,
-  role: RoleName
+  role: UserRole
 ): Promise<{ error: string | null }> {
   const supabase = createAdminClient();
 
@@ -412,7 +313,7 @@ export async function assignRole(
  */
 export async function removeRole(
   userId: string,
-  role: RoleName
+  role: UserRole
 ): Promise<{ error: string | null }> {
   const supabase = createAdminClient();
 
@@ -512,40 +413,6 @@ export async function getAllUsers(): Promise<AuthUser[]> {
     createdAt: user.created_at,
     updatedAt: user.updated_at
   }));
-}
-
-/**
- * Get a single user by ID (Admin client)
- */
-export async function getUserById(userId: string): Promise<AuthUser | null> {
-  const supabase = createAdminClient();
-
-  const { data, error } = await supabase
-    .from('users')
-    .select(`
-      *,
-      roles:user_roles(id, role),
-      profile:profiles(*)
-    `)
-    .eq('id', userId)
-    .single();
-
-  if (error || !data) {
-    console.error('Failed to get user by id:', error);
-    return null;
-  }
-
-  return {
-    id: data.id,
-    email: data.email,
-    name: data.name,
-    avatar: data.avatar,
-    emailVerified: data.email_verified || false,
-    roles: data.roles || [],
-    profile: data.profile || null,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at
-  };
 }
 
 /**

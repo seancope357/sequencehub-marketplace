@@ -27,16 +27,12 @@ export type Database = {
 // CONFIGURATION
 // ============================================
 
-function getSupabaseConfig() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase environment variables');
-  }
-
-  return { supabaseUrl, supabaseAnonKey, supabaseServiceKey };
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
 }
 
 // ============================================
@@ -48,7 +44,6 @@ function getSupabaseConfig() {
  * Use in Client Components only
  */
 export function createClient(): SupabaseClient<Database> {
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
 }
 
@@ -57,7 +52,6 @@ export function createClient(): SupabaseClient<Database> {
  * Handles cookies automatically
  */
 export async function createServerClient(): Promise<SupabaseClient<Database>> {
-  const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
   const cookieStore = await cookies();
 
   return createSupabaseServerClient<Database>(
@@ -65,24 +59,14 @@ export async function createServerClient(): Promise<SupabaseClient<Database>> {
     supabaseAnonKey,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll().map((cookie) => ({
-            name: cookie.name,
-            value: cookie.value,
-          }));
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          try {
-            for (const cookie of cookiesToSet) {
-              cookieStore.set({
-                name: cookie.name,
-                value: cookie.value,
-                ...cookie.options,
-              });
-            }
-          } catch {
-            // Ignore if called from a Server Component where cookies are read-only
-          }
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          cookieStore.set({ name, value: '', ...options });
         },
       },
     }
@@ -95,8 +79,6 @@ export async function createServerClient(): Promise<SupabaseClient<Database>> {
  * WARNING: This bypasses RLS policies!
  */
 export function createAdminClient(): SupabaseClient<Database> {
-  const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
-
   if (!supabaseServiceKey) {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
   }

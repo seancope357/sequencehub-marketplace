@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { CreatorOnboarding } from '@/components/onboarding/CreatorOnboarding';
 
 export default function OnboardingPage() {
-  redirect('/dashboard/creator/onboarding');
+  return <CreatorOnboarding />;
 }

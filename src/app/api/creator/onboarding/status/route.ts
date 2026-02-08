@@ -4,32 +4,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
-import { getAccountStatus, getStripeConfigStatus, StripeConfigError, updateCreatorAccountStatus } from '@/lib/stripe-connect';
+import { getAccountStatus } from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
-    const stripeConfig = getStripeConfigStatus();
-    if (!stripeConfig.configured) {
-      return NextResponse.json(
-        {
-          success: true,
-          stripeConfigured: false,
-          message: stripeConfig.message,
-          hasAccount: false,
-          onboardingStatus: 'DISABLED',
-          isComplete: false,
-          chargesEnabled: false,
-          detailsSubmitted: false,
-          capabilitiesActive: false,
-          needsOnboarding: false,
-          canReceivePayments: false,
-        },
-        { status: 200 }
-      );
-    }
-
     // 1. Authenticate user
     const user = await getCurrentUser();
     if (!user) {
@@ -39,7 +20,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 2. Get creator account from database
+    // 2. Verify user has CREATOR role
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - Creator role required' },
+        { status: 403 }
+      );
+    }
+
+    // 3. Get creator account from database
     const creatorAccount = await db.creatorAccount.findUnique({
       where: { userId: user.id },
     });
@@ -49,15 +38,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          stripeConfigured: true,
           hasAccount: false,
           onboardingStatus: 'PENDING',
-          isComplete: false,
-          chargesEnabled: false,
-          detailsSubmitted: false,
-          capabilitiesActive: false,
           needsOnboarding: true,
-          canReceivePayments: false,
         },
         { status: 200 }
       );
@@ -68,85 +51,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          stripeConfigured: true,
           hasAccount: true,
           onboardingStatus: creatorAccount.onboardingStatus,
-          isComplete: false,
-          chargesEnabled: false,
-          detailsSubmitted: false,
-          capabilitiesActive: false,
           needsOnboarding: true,
-          canReceivePayments: false,
         },
         { status: 200 }
       );
     }
 
     // 4. Check current status with Stripe
-    try {
-      const {
-        account,
+    const {
+      isComplete,
+      chargesEnabled,
+      detailsSubmitted,
+      capabilitiesActive,
+    } = await getAccountStatus(creatorAccount.stripeAccountId);
+
+    // 5. Return comprehensive status
+    return NextResponse.json(
+      {
+        success: true,
+        hasAccount: true,
+        stripeAccountId: creatorAccount.stripeAccountId,
+        onboardingStatus: creatorAccount.onboardingStatus,
         isComplete,
         chargesEnabled,
         detailsSubmitted,
         capabilitiesActive,
-      } = await getAccountStatus(creatorAccount.stripeAccountId);
-
-      const derivedStatus = isComplete
-        ? 'COMPLETED'
-        : detailsSubmitted
-        ? 'IN_PROGRESS'
-        : 'PENDING';
-
-      try {
-        await updateCreatorAccountStatus(creatorAccount.stripeAccountId, account);
-      } catch (updateError) {
-        console.warn('Failed to sync Stripe account status:', updateError);
-      }
-
-      // 5. Return comprehensive status
-      return NextResponse.json(
-        {
-          success: true,
-          stripeConfigured: true,
-          hasAccount: true,
-          stripeAccountId: creatorAccount.stripeAccountId,
-          onboardingStatus: derivedStatus,
-          isComplete,
-          chargesEnabled,
-          detailsSubmitted,
-          capabilitiesActive,
-          needsOnboarding: !isComplete,
-          canReceivePayments: chargesEnabled && isComplete,
-        },
-        { status: 200 }
-      );
-    } catch (stripeError) {
-      const message =
-        stripeError instanceof StripeConfigError
-          ? stripeError.message
-          : stripeError instanceof Error
-          ? stripeError.message
-          : 'Stripe error';
-
-      return NextResponse.json(
-        {
-          success: true,
-          stripeConfigured: true,
-          hasAccount: true,
-          stripeAccountId: creatorAccount.stripeAccountId,
-          onboardingStatus: creatorAccount.onboardingStatus,
-          isComplete: false,
-          chargesEnabled: false,
-          detailsSubmitted: false,
-          capabilitiesActive: false,
-          needsOnboarding: true,
-          canReceivePayments: false,
-          stripeError: message,
-        },
-        { status: 200 }
-      );
-    }
+        needsOnboarding: !isComplete,
+        canReceivePayments: chargesEnabled && isComplete,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error('Error checking onboarding status:', error);
 

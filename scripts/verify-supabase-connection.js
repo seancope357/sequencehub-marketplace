@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Supabase Connection Verification Script
  * Tests database connection and Supabase client initialization

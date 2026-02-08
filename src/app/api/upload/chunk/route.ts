@@ -4,13 +4,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/supabase/auth';
+import { getCurrentUser } from '@/lib/auth';;
 import { db } from '@/lib/db';
 import { getUploadSession, updateUploadSession, storeChunk } from '@/lib/upload/session';
 import { validateChunkHash } from '@/lib/upload/validation';
 import { ChunkUploadResponse } from '@/lib/upload/types';
 import { AuditAction } from '@prisma/client';
-import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,16 +17,6 @@ export async function POST(request: NextRequest) {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const limitResult = await applyRateLimit(request, {
-      config: RATE_LIMIT_CONFIGS.UPLOAD_FILE,
-      byUser: true,
-      byIp: false,
-      message: 'Chunk upload rate limit exceeded. Please try again later.',
-    });
-    if (!limitResult.allowed) {
-      return limitResult.response;
     }
 
     // Parse form data
@@ -46,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get upload session
-    const session = await getUploadSession(uploadId);
+    const session = getUploadSession(uploadId);
     if (!session) {
       return NextResponse.json(
         { error: 'Upload session not found' },
@@ -72,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Check if session expired
     if (session.expiresAt < new Date()) {
-      await updateUploadSession(uploadId, { status: 'EXPIRED' });
+      updateUploadSession(uploadId, { status: 'EXPIRED' });
       return NextResponse.json(
         { error: 'Upload session expired' },
         { status: 400 }
@@ -128,7 +117,7 @@ export async function POST(request: NextRequest) {
     const uploadedChunks = [...session.uploadedChunks, chunkIndex];
     const allChunksUploaded = uploadedChunks.length === session.totalChunks;
 
-    await updateUploadSession(uploadId, {
+    updateUploadSession(uploadId, {
       uploadedChunks,
       status: allChunksUploaded ? 'ALL_CHUNKS_UPLOADED' : 'UPLOADING',
     });

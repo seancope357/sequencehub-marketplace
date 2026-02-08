@@ -46,7 +46,7 @@ export {
   deleteUploadSession,
   storeChunk,
   combineChunks,
-  getChunkStorageKey,
+  getChunkPath,
   getFinalFilePath,
   cleanupExpiredSessions,
   getSessionStats,
