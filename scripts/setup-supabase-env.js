@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Interactive Supabase Environment Setup Script
  * Automatically configures .env.local with your Supabase credentials

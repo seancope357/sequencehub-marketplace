@@ -225,7 +225,7 @@ if (!REDIS_URL && !process.env.REDIS_HOST) {
 // EXPORTS
 // ============================================
 
-export default {
+const redisJobs = {
   getRedisConnection,
   createRedisConnection,
   checkRedisHealth,
@@ -233,3 +233,5 @@ export default {
   closeRedisConnection,
   isRedisEnabled,
 };
+
+export default redisJobs;
