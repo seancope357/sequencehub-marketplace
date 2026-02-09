@@ -59,21 +59,32 @@ interface Product {
 
 export default function DashboardProducts() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isCreatorOrAdmin, isLoading: authLoading } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; product: Product | null }>({
     open: false,
     product: null,
   });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    // Don't redirect while auth is still loading
+    if (authLoading) return;
+
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
+
+    // Require CREATOR or ADMIN role
+    if (!isCreatorOrAdmin) {
+      router.push('/dashboard/creator/onboarding');
+      return;
+    }
+
     loadProducts();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isCreatorOrAdmin, authLoading, router]);
 
   const loadProducts = async () => {
     try {
@@ -93,20 +104,38 @@ export default function DashboardProducts() {
 
   const handleDeleteProduct = async (productId: string) => {
     try {
+      setIsDeleting(true);
       const response = await fetch(`/api/dashboard/products/${productId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         toast.success('Product deleted successfully');
+        // Remove product from list immediately for better UX
+        setProducts((prev) => prev.filter((p) => p.id !== productId));
         setDeleteDialog({ open: false, product: null });
-        loadProducts();
       } else {
-        toast.error('Failed to delete product');
+        // Parse error message from response
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Failed to delete product';
+
+        // Handle specific error cases
+        if (response.status === 403 && errorMessage.includes('orders')) {
+          toast.error('Cannot delete product with existing orders. Please archive it instead.');
+        } else if (response.status === 404) {
+          toast.error('Product not found or already deleted');
+          // Remove from list since it doesn't exist
+          setProducts((prev) => prev.filter((p) => p.id !== productId));
+          setDeleteDialog({ open: false, product: null });
+        } else {
+          toast.error(errorMessage);
+        }
       }
     } catch (error) {
       console.error('Error deleting product:', error);
-      toast.error('Failed to delete product');
+      toast.error('Network error. Please check your connection and try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -272,27 +301,35 @@ export default function DashboardProducts() {
       {/* Delete Confirmation Dialog */}
       <AlertDialog
         open={deleteDialog.open}
-        onOpenChange={(open) =>
-          setDeleteDialog({ ...deleteDialog, open })
-        }
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setDeleteDialog({ ...deleteDialog, open });
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Product</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{deleteDialog.product?.title}"? This
-              action cannot be undone.
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                This will permanently delete <strong>{deleteDialog.product?.title}</strong> and
+                all associated files.
+              </p>
+              <p className="text-destructive font-medium">
+                This action cannot be undone.
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
               onClick={() =>
                 deleteDialog.product && handleDeleteProduct(deleteDialog.product.id)
               }
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete Product'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

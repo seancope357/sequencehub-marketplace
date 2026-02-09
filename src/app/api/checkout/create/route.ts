@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';;
+import { getCurrentUser, createAuditLog } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { stripe } from '@/lib/stripe';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
-import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-12-18.acacia',
-});
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Apply rate limiting: 10 checkout sessions per hour per user
+    // Apply rate limiting
     const limitResult = await applyRateLimit(request, {
       config: RATE_LIMIT_CONFIGS.CHECKOUT_CREATE,
       byUser: true,
@@ -32,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { productId } = body;
+    const { productId, successUrl, cancelUrl } = body;
 
     if (!productId) {
       return NextResponse.json(
@@ -41,19 +39,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get product with price and creator info
+    // Fetch product with creator info and active price
     const product = await db.product.findUnique({
       where: { id: productId },
       include: {
+        creator: {
+          include: {
+            creatorAccount: true,
+          },
+        },
         prices: {
           where: { isActive: true },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
-        creator: {
-          include: {
-            creatorAccount: true,
-          },
+        media: {
+          where: { mediaType: 'cover' },
+          take: 1,
         },
       },
     });
@@ -72,95 +74,149 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const price = product.prices[0];
-    if (!price) {
-      return NextResponse.json(
-        { error: 'Product price not found' },
-        { status: 404 }
-      );
-    }
+    // Check if user already owns this product
+    const existingEntitlement = await db.entitlement.findFirst({
+      where: {
+        userId: user.id,
+        productId: productId,
+        isActive: true,
+      },
+    });
 
-    // Get or create creator's Stripe account
-    const creatorAccount = product.creator.creatorAccount;
-    if (!creatorAccount || !creatorAccount.stripeAccountId) {
+    if (existingEntitlement) {
       return NextResponse.json(
-        { error: 'Creator account not configured' },
+        { error: 'You already own this product' },
         { status: 400 }
       );
     }
 
-    // Create Stripe checkout session
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    const activePrice = product.prices[0];
+    if (!activePrice) {
+      return NextResponse.json(
+        { error: 'No active price found for this product' },
+        { status: 400 }
+      );
+    }
+
+    // Check creator has Stripe Connect account
+    const creatorAccount = product.creator.creatorAccount;
+    if (!creatorAccount || !creatorAccount.stripeAccountId) {
+      return NextResponse.json(
+        { error: 'Creator has not connected their Stripe account' },
+        { status: 400 }
+      );
+    }
+
+    if (creatorAccount.onboardingStatus !== 'COMPLETED') {
+      return NextResponse.json(
+        { error: 'Creator has not completed Stripe onboarding' },
+        { status: 400 }
+      );
+    }
+
+    // Calculate platform fee (default 10%)
+    const platformFeePercent = creatorAccount.platformFeePercent || 10.0;
+    const amountInCents = Math.round(activePrice.amount * 100);
+    const platformFeeAmount = Math.round(amountInCents * (platformFeePercent / 100));
+
+    // Get cover image URL for Stripe checkout
+    const coverImage = product.media[0];
+    const images = coverImage?.storageKey
+      ? [`${BASE_URL}/api/media/${coverImage.storageKey}`]
+      : [];
+
+    // Create Stripe Checkout session
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_intent_data: {
-        application_fee_amount: Math.round(price.amount * 100 * (creatorAccount.platformFeePercent / 100)),
-        transfer_data: {
-          destination: creatorAccount.stripeAccountId,
-        },
-        metadata: {
-          productId: product.id,
-          userId: user.id,
-        },
-      },
+      customer_email: user.email,
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: activePrice.currency.toLowerCase(),
+            unit_amount: amountInCents,
             product_data: {
               name: product.title,
-              description: product.description?.substring(0, 500),
-              images: product.creator.avatar
-                ? [product.creator.avatar]
-                : undefined,
+              description: product.description.substring(0, 500), // Stripe limit
+              images: images,
               metadata: {
                 productId: product.id,
+                category: product.category,
               },
             },
-            unit_amount: Math.round(price.amount * 100), // Convert to cents
           },
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/library?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/p/${product.slug}?canceled=true`,
-      metadata: {
-        productId: product.id,
-        userId: user.id,
-        productSlug: product.slug,
+      payment_intent_data: {
+        application_fee_amount: platformFeeAmount,
+        transfer_data: {
+          destination: creatorAccount.stripeAccountId,
+        },
+        metadata: {
+          userId: user.id,
+          productId: product.id,
+          creatorId: product.creatorId,
+          priceId: activePrice.id,
+        },
       },
-      client_reference_id: `${user.id}_${Date.now()}`,
-    };
+      success_url: successUrl || `${BASE_URL}/library?purchase=success`,
+      cancel_url: cancelUrl || `${BASE_URL}/browse/products/${product.slug}`,
+      metadata: {
+        userId: user.id,
+        productId: product.id,
+        creatorId: product.creatorId,
+        priceId: activePrice.id,
+        platformFeePercent: platformFeePercent.toString(),
+      },
+    });
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
-
-    // Create checkout session record
+    // Create CheckoutSession record
     await db.checkoutSession.create({
       data: {
         sessionId: session.id,
         userId: user.id,
         productId: product.id,
-        priceId: price.id,
-        amount: price.amount,
-        currency: 'USD',
+        priceId: activePrice.id,
+        amount: activePrice.amount,
+        currency: activePrice.currency,
         status: 'PENDING',
-        successUrl: sessionParams.success_url,
-        cancelUrl: sessionParams.cancelUrl,
-        metadata: JSON.stringify(sessionParams.metadata),
+        successUrl: successUrl || null,
+        cancelUrl: cancelUrl || null,
+        metadata: JSON.stringify({
+          creatorId: product.creatorId,
+          platformFeePercent,
+          platformFeeAmount: platformFeeAmount / 100, // Store in dollars
+        }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
       },
     });
 
+    // Create audit log
+    await createAuditLog({
+      userId: user.id,
+      action: 'CHECKOUT_SESSION_CREATED',
+      entityType: 'checkout_session',
+      entityId: session.id,
+      changes: JSON.stringify({
+        productId: product.id,
+        amount: activePrice.amount,
+        currency: activePrice.currency,
+      }),
+      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
+      userAgent: request.headers.get('user-agent') || undefined,
+    });
+
     return NextResponse.json(
       {
-        checkoutUrl: session.url,
         sessionId: session.id,
+        url: session.url,
       },
-      { status: 200 }
+      { status: 201 }
     );
   } catch (error) {
     console.error('Error creating checkout session:', error);
     return NextResponse.json(
-      { error: 'Failed to create checkout session' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

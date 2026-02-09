@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import { AppHeader } from '@/components/navigation/AppHeader';
+import { BuyNowButton } from '@/components/checkout/BuyNowButton';
 
 interface Product {
   id: string;
@@ -98,36 +99,6 @@ export default function ProductPage() {
     }
   };
 
-  const handleBuyNow = async () => {
-    if (!isAuthenticated) {
-      toast.error('Please login to purchase');
-      router.push('/auth/login');
-      return;
-    }
-
-    if (!product) return;
-
-    try {
-      const response = await fetch('/api/checkout/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: product.id,
-          priceId: product.id, // Will be updated to actual price ID
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        router.push(data.checkoutUrl);
-      } else {
-        toast.error('Failed to create checkout session');
-      }
-    } catch (error) {
-      console.error('Error creating checkout:', error);
-      toast.error('Failed to create checkout session');
-    }
-  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -295,17 +266,14 @@ export default function ProductPage() {
 
                 </div>
 
-                {product.purchased ? (
-                  <Button className="w-full" size="lg" onClick={() => router.push('/library')}>
-                    <Download className="h-5 w-5 mr-2" />
-                    Download Now
-                  </Button>
-                ) : (
-                  <Button className="w-full" size="lg" onClick={handleBuyNow}>
-                    <ShoppingCart className="h-5 w-5 mr-2" />
-                    Buy Now
-                  </Button>
-                )}
+                <BuyNowButton
+                  productId={product.id}
+                  productSlug={product.slug}
+                  price={product.price}
+                  alreadyPurchased={product.purchased}
+                  className="w-full"
+                  size="lg"
+                />
               </CardContent>
             </Card>
 

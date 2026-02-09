@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, createAuditLog } from '@/lib/auth';;
+import { getCurrentUser, createAuditLog } from '@/lib/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
@@ -11,6 +12,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    // Require CREATOR or ADMIN role
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - CREATOR role required to view products' },
+        { status: 403 }
       );
     }
 
@@ -63,6 +72,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    // Require CREATOR or ADMIN role
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - CREATOR role required to create products' },
+        { status: 403 }
       );
     }
 
@@ -133,10 +150,41 @@ export async function POST(request: NextRequest) {
       .replace(/-+/g, '-')
       .substring(0, 100);
 
-    // Create product
+    // Check for duplicate slug
+    const existingProduct = await db.product.findUnique({
+      where: { slug },
+    });
+
+    const finalSlug = existingProduct
+      ? `${slug}-${Date.now()}`
+      : slug;
+
+    // Validate uploaded fileIds if provided
+    if (files && files.length > 0) {
+      const fileIds = files.map((f: any) => f.fileId).filter(Boolean);
+
+      if (fileIds.length > 0) {
+        // Verify all files exist and have versionId='temp' (uploaded but not linked yet)
+        const uploadedFiles = await db.productFile.findMany({
+          where: {
+            id: { in: fileIds },
+            versionId: 'temp',
+          },
+        });
+
+        if (uploadedFiles.length !== fileIds.length) {
+          return NextResponse.json(
+            { error: 'Some uploaded files are invalid or already linked to another product' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Create product with version
     const product = await db.product.create({
       data: {
-        slug,
+        slug: finalSlug,
         creatorId: user.id,
         title,
         description,
@@ -163,17 +211,6 @@ export async function POST(request: NextRequest) {
             versionName: '1.0.0',
             isLatest: true,
             publishedAt: status === 'PUBLISHED' ? new Date() : null,
-            files: {
-              create: files.map((file: any) => ({
-                fileName: file.fileName,
-                originalName: file.fileName,
-                fileType: file.fileType,
-                fileSize: file.fileSize,
-                fileHash: generateFileHash(),
-                storageKey: generateStorageKey(slug, file.fileName),
-                mimeType: getMimeType(file.fileName),
-              })),
-            },
           },
         },
         media: {
@@ -184,13 +221,35 @@ export async function POST(request: NextRequest) {
               originalName: 'cover.jpg',
               fileSize: 0,
               fileHash: 'placeholder',
-              storageKey: `covers/${slug}.jpg`,
+              storageKey: `covers/${finalSlug}.jpg`,
               mimeType: 'image/jpeg',
             },
           ],
         },
       },
+      include: {
+        versions: true,
+      },
     });
+
+    // Link uploaded files to the new version
+    if (files && files.length > 0) {
+      const fileIds = files.map((f: any) => f.fileId).filter(Boolean);
+
+      if (fileIds.length > 0) {
+        const firstVersion = product.versions[0];
+
+        await db.productFile.updateMany({
+          where: {
+            id: { in: fileIds },
+            versionId: 'temp',
+          },
+          data: {
+            versionId: firstVersion.id,
+          },
+        });
+      }
+    }
 
     // Create audit log
     await createAuditLog({
@@ -224,29 +283,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function generateFileHash(): string {
-  // Generate a random hash for now (in production, use actual file hash)
-  return `hash-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-}
-
-function generateStorageKey(productSlug: string, fileName: string): string {
-  return `products/${productSlug}/${Date.now()}/${fileName}`;
-}
-
-function getMimeType(fileName: string): string {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = {
-    fseq: 'application/octet-stream',
-    xsq: 'application/xml',
-    xml: 'application/xml',
-    mp4: 'video/mp4',
-    mov: 'video/quicktime',
-    gif: 'image/gif',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-  };
-  return mimeTypes[ext || ''] || 'application/octet-stream';
 }

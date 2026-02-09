@@ -1,30 +1,22 @@
 /**
  * GET /api/creator/onboarding/status
- * Check the onboarding completion status for the current creator
+ * Check the onboarding completion status for any authenticated user
+ * Note: Does NOT require CREATOR role - users check status BEFORE becoming creators
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isCreatorOrAdmin } from '@/lib/auth-utils';
-import { getCurrentUser } from '@/lib/auth';;
+import { getCurrentUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getAccountStatus } from '@/lib/stripe-connect';
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. Authenticate user
+    // 1. Authenticate user (no role check - anyone can check their onboarding status)
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    // 2. Verify user has CREATOR role
-    if (!isCreatorOrAdmin(user)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
       );
     }
 

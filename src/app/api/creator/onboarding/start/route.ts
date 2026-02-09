@@ -1,16 +1,16 @@
 /**
  * POST /api/creator/onboarding/start
- * Initialize Stripe Connect Express onboarding for a creator
+ * Initialize Stripe Connect Express onboarding for any authenticated user
+ * Note: User does NOT need CREATOR role yet - role is assigned after successful onboarding
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { isCreatorOrAdmin } from '@/lib/auth-utils';
-import { getCurrentUser, createAuditLog } from '@/lib/auth';;
+import { getCurrentUser, createAuditLog } from '@/lib/auth';
 import { initializeCreatorAccount } from '@/lib/stripe-connect';
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Authenticate user
+    // 1. Authenticate user (no role check needed - anyone can become a creator)
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
@@ -19,11 +19,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Verify user has CREATOR role
-    if (!isCreatorOrAdmin(user)) {
+    // 2. Check if user already has CREATOR role
+    const hasCreatorRole = user.roles.some((r) => r.role === 'CREATOR');
+    if (hasCreatorRole) {
       return NextResponse.json(
-        { error: 'Forbidden - Creator role required' },
-        { status: 403 }
+        { error: 'You are already a creator. Visit your dashboard to manage your products.' },
+        { status: 400 }
       );
     }
 

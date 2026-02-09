@@ -1,19 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import {
   Package,
-  Upload,
   Save,
   Eye,
-  Trash2,
-  Plus,
   X,
   DollarSign,
   Check,
   AlertCircle,
-  CreditCard,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,18 +33,6 @@ import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
 import { AppHeader } from '@/components/navigation/AppHeader';
 
-interface UploadedFile {
-  id: string;
-  file: File;
-  fileName: string;
-  fileSize: number;
-  fileType: 'SOURCE' | 'RENDERED' | 'ASSET' | 'PREVIEW';
-  uploadProgress?: number;
-  uploadedFileId?: string;
-  storageKey?: string;
-  uploadError?: string;
-}
-
 const CATEGORIES = [
   { value: 'CHRISTMAS', label: 'Christmas' },
   { value: 'HALLOWEEN', label: 'Halloween' },
@@ -60,34 +45,50 @@ const CATEGORIES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-interface StripeOnboardingStatus {
-  hasAccount: boolean;
-  stripeAccountId?: string;
-  onboardingStatus: string;
-  isComplete: boolean;
-  chargesEnabled: boolean;
-  detailsSubmitted: boolean;
-  capabilitiesActive: boolean;
-  needsOnboarding: boolean;
-  canReceivePayments: boolean;
+interface ProductFile {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
 }
 
-export default function NewProductPage() {
+interface Product {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  status: string;
+  price: number;
+  includesFSEQ: boolean;
+  includesSource: boolean;
+  licenseType: 'PERSONAL' | 'COMMERCIAL';
+  seatCount: number | null;
+  xLightsVersionMin: string | null;
+  xLightsVersionMax: string | null;
+  targetUse: string | null;
+  expectedProps: string | null;
+  saleCount: number;
+  viewCount: number;
+  files: ProductFile[];
+}
+
+export default function EditProductPage() {
   const router = useRouter();
+  const params = useParams();
+  const productId = params?.id as string;
   const { user, isAuthenticated, isCreatorOrAdmin, isLoading: authLoading } = useAuth();
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // Stripe Connect status
-  const [stripeStatus, setStripeStatus] = useState<StripeOnboardingStatus | null>(null);
-  const [stripeLoading, setStripeLoading] = useState(true);
-
-  // Basic Info
+  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
+  const [status, setStatus] = useState('DRAFT');
 
   // xLights Metadata
   const [xLightsVersionMin, setXLightsVersionMin] = useState('');
@@ -103,8 +104,8 @@ export default function NewProductPage() {
   const [licenseType, setLicenseType] = useState<'PERSONAL' | 'COMMERCIAL'>('PERSONAL');
   const [seatCount, setSeatCount] = useState(1);
 
-  // Files
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  // Product data
+  const [product, setProduct] = useState<Product | null>(null);
 
   // Preview mode
   const [showPreview, setShowPreview] = useState(false);
@@ -124,141 +125,51 @@ export default function NewProductPage() {
       return;
     }
 
-    checkStripeStatus();
-  }, [isAuthenticated, isCreatorOrAdmin, authLoading, router]);
+    fetchProduct();
+  }, [isAuthenticated, isCreatorOrAdmin, authLoading, router, productId]);
 
-  const checkStripeStatus = async () => {
+  const fetchProduct = async () => {
+    if (!productId) return;
+
     try {
-      setStripeLoading(true);
-      const response = await fetch('/api/creator/onboarding/status');
-      if (response.ok) {
-        const data = await response.json();
-        setStripeStatus(data);
-      } else {
-        console.error('Failed to check Stripe status');
+      setIsLoading(true);
+      const response = await fetch(`/api/dashboard/products/${productId}`);
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error.error || 'Failed to load product');
+        router.push('/dashboard/products');
+        return;
       }
+
+      const data = await response.json();
+      const productData = data.product;
+
+      // Populate form fields
+      setProduct(productData);
+      setTitle(productData.title);
+      setDescription(productData.description);
+      setCategory(productData.category);
+      setPrice(productData.price.toString());
+      setStatus(productData.status);
+      setIncludesFSEQ(productData.includesFSEQ);
+      setIncludesSource(productData.includesSource);
+      setLicenseType(productData.licenseType);
+      setSeatCount(productData.seatCount || 1);
+      setXLightsVersionMin(productData.xLightsVersionMin || '');
+      setXLightsVersionMax(productData.xLightsVersionMax || '');
+      setTargetUse(productData.targetUse || '');
+      setExpectedProps(productData.expectedProps || '');
     } catch (error) {
-      console.error('Error checking Stripe status:', error);
+      console.error('Error fetching product:', error);
+      toast.error('Failed to load product');
+      router.push('/dashboard/products');
     } finally {
-      setStripeLoading(false);
       setIsLoading(false);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    const newFiles: UploadedFile[] = Array.from(files).map((file) => {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      let fileType: UploadedFile['fileType'] = 'ASSET';
-
-      if (ext === 'fseq') fileType = 'RENDERED';
-      else if (ext === 'xsq' || ext === 'xml') fileType = 'SOURCE';
-      else if (['mp4', 'mov', 'gif'].includes(ext || '')) fileType = 'PREVIEW';
-
-      return {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-        file,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType,
-      };
-    });
-
-    setUploadedFiles((prev) => [...prev, ...newFiles]);
-  };
-
-  const removeFile = (fileId: string) => {
-    setUploadedFiles((prev) => prev.filter((f) => f.id !== fileId));
-  };
-
-  const uploadFileToStorage = async (uploadedFile: UploadedFile): Promise<void> => {
-    const formData = new FormData();
-    formData.append('file', uploadedFile.file);
-    formData.append('fileType', uploadedFile.fileType);
-
-    try {
-      const response = await fetch('/api/upload/simple', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-      }
-
-      const data = await response.json();
-
-      // Update the file in state with upload results
-      setUploadedFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadedFile.id
-            ? {
-                ...f,
-                uploadedFileId: data.fileId,
-                storageKey: data.storageKey,
-                uploadProgress: 100,
-                uploadError: undefined,
-              }
-            : f
-        )
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-
-      // Update file with error
-      setUploadedFiles((prev) =>
-        prev.map((f) =>
-          f.id === uploadedFile.id
-            ? { ...f, uploadError: errorMessage, uploadProgress: 0 }
-            : f
-        )
-      );
-
-      throw error;
-    }
-  };
-
-  const uploadAllFiles = async (): Promise<boolean> => {
-    if (uploadedFiles.length === 0) return true;
-
-    const filesToUpload = uploadedFiles.filter((f) => !f.uploadedFileId);
-    if (filesToUpload.length === 0) return true;
-
-    let uploadsFailed = false;
-
-    // Upload files sequentially with progress tracking
-    for (let i = 0; i < filesToUpload.length; i++) {
-      const file = filesToUpload[i];
-
-      try {
-        // Set progress to show upload starting
-        setUploadedFiles((prev) =>
-          prev.map((f) => (f.id === file.id ? { ...f, uploadProgress: 1 } : f))
-        );
-
-        await uploadFileToStorage(file);
-
-        toast.success(`Uploaded ${file.fileName}`);
-      } catch (error) {
-        uploadsFailed = true;
-        toast.error(`Failed to upload ${file.fileName}`);
-        console.error(`Upload error for ${file.fileName}:`, error);
-      }
-    }
-
-    return !uploadsFailed;
-  };
-
   const handleSave = async (publish: boolean = false) => {
-    // Check Stripe account first
-    if (!stripeStatus?.canReceivePayments) {
-      toast.error('Please connect your Stripe account before creating products');
-      return;
-    }
-
     if (!title.trim()) {
       toast.error('Title is required');
       return;
@@ -279,29 +190,12 @@ export default function NewProductPage() {
       return;
     }
 
-    if (!includesFSEQ && !includesSource && uploadedFiles.length === 0) {
-      toast.error('Please add at least one file or enable file types');
-      return;
-    }
-
     try {
       setIsSaving(true);
       setIsPublishing(publish);
 
-      // Step 1: Upload all files to storage first
-      if (uploadedFiles.length > 0) {
-        toast.info(`Uploading ${uploadedFiles.length} file(s)...`);
-        const uploadSuccess = await uploadAllFiles();
-
-        if (!uploadSuccess) {
-          toast.error('Some files failed to upload. Please try again.');
-          return;
-        }
-      }
-
-      // Step 2: Create product with uploaded file IDs
-      const response = await fetch('/api/dashboard/products', {
-        method: 'POST',
+      const response = await fetch(`/api/dashboard/products/${productId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
@@ -316,32 +210,25 @@ export default function NewProductPage() {
           includesSource,
           licenseType,
           seatCount: licenseType === 'COMMERCIAL' ? seatCount : null,
-          status: publish ? 'PUBLISHED' : 'DRAFT',
-          files: uploadedFiles.map((f) => ({
-            fileId: f.uploadedFileId,
-            fileName: f.fileName,
-            fileType: f.fileType,
-            fileSize: f.fileSize,
-            storageKey: f.storageKey,
-          })),
+          status: publish ? 'PUBLISHED' : status,
         }),
       });
 
       if (response.ok) {
-        const data = await response.json();
         toast.success(
           publish
             ? 'Product published successfully!'
-            : 'Product saved as draft'
+            : 'Product updated successfully'
         );
-        router.push(`/dashboard/products/${data.product.id}/edit`);
+        // Refresh product data
+        await fetchProduct();
       } else {
         const error = await response.json();
-        toast.error(error.error || 'Failed to save product');
+        toast.error(error.error || 'Failed to update product');
       }
     } catch (error) {
-      console.error('Error saving product:', error);
-      toast.error('Failed to save product');
+      console.error('Error updating product:', error);
+      toast.error('Failed to update product');
     } finally {
       setIsSaving(false);
       setIsPublishing(false);
@@ -361,32 +248,41 @@ export default function NewProductPage() {
     return `Commercial Use (${seatCount} seat${seatCount > 1 ? 's' : ''})`;
   };
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">Loading...</div>
+        <div className="text-center">
+          <Package className="h-12 w-12 animate-pulse mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">Loading product...</p>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
+  if (!user || !product) {
     return null;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader contextLabel="New Product" />
+      <AppHeader contextLabel="Edit Product" />
 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-end gap-2 mb-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push('/dashboard/products')}
-            >
-              Back to Products
-            </Button>
+          <div className="flex items-center justify-between gap-2 mb-6">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/dashboard/products')}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Products
+              </Button>
+              <Badge variant={status === 'PUBLISHED' ? 'default' : 'secondary'}>
+                {status}
+              </Badge>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -396,38 +292,6 @@ export default function NewProductPage() {
               {showPreview ? 'Edit' : 'Preview'}
             </Button>
           </div>
-          {/* Stripe Account Requirement Banner */}
-          {!stripeLoading && stripeStatus && !stripeStatus.canReceivePayments && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-5 w-5" />
-              <AlertTitle className="text-lg font-semibold">Stripe Account Required</AlertTitle>
-              <AlertDescription className="mt-2">
-                <p className="mb-3">
-                  You need to connect your Stripe account before you can sell products on SequenceHUB.
-                  This is required to receive payments from buyers.
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-white hover:bg-gray-50"
-                    onClick={() => router.push('/dashboard/creator/onboarding')}
-                  >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Set Up Stripe Account
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-white/10"
-                    onClick={checkStripeStatus}
-                  >
-                    Refresh Status
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
 
           {showPreview ? (
             /* Preview Mode */
@@ -493,11 +357,11 @@ export default function NewProductPage() {
                     </div>
                   )}
 
-                  {uploadedFiles.length > 0 && (
+                  {product.files && product.files.length > 0 && (
                     <div>
                       <h3 className="font-semibold mb-2">Included Files</h3>
                       <div className="space-y-2">
-                        {uploadedFiles.map((file) => (
+                        {product.files.map((file) => (
                           <div key={file.id} className="flex items-center justify-between p-3 border rounded">
                             <div className="flex items-center gap-2">
                               <Package className="h-4 w-4 text-muted-foreground" />
@@ -514,6 +378,19 @@ export default function NewProductPage() {
                       </div>
                     </div>
                   )}
+
+                  <div className="bg-muted p-4 rounded">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Total Sales:</span>
+                        <span className="font-semibold ml-2">{product.saleCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total Views:</span>
+                        <span className="font-semibold ml-2">{product.viewCount}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <Separator />
@@ -529,18 +406,20 @@ export default function NewProductPage() {
                     <Button
                       variant="outline"
                       onClick={() => handleSave(false)}
-                      disabled={isSaving || !stripeStatus?.canReceivePayments}
+                      disabled={isSaving}
                     >
                       <Save className="h-4 w-4 mr-2" />
-                      {isSaving ? 'Saving...' : 'Save Draft'}
+                      {isSaving ? 'Saving...' : 'Save Changes'}
                     </Button>
-                    <Button
-                      onClick={() => handleSave(true)}
-                      disabled={isSaving || !stripeStatus?.canReceivePayments}
-                    >
-                      <Package className="h-4 w-4 mr-2" />
-                      {isPublishing ? 'Publishing...' : 'Publish'}
-                    </Button>
+                    {status !== 'PUBLISHED' && (
+                      <Button
+                        onClick={() => handleSave(true)}
+                        disabled={isSaving}
+                      >
+                        <Package className="h-4 w-4 mr-2" />
+                        {isPublishing ? 'Publishing...' : 'Publish'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -548,9 +427,8 @@ export default function NewProductPage() {
           ) : (
             /* Edit Mode */
             <Tabs defaultValue="basic" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                <TabsTrigger value="files">Files</TabsTrigger>
                 <TabsTrigger value="metadata">xLights</TabsTrigger>
                 <TabsTrigger value="pricing">Pricing</TabsTrigger>
                 <TabsTrigger value="license">License</TabsTrigger>
@@ -605,22 +483,9 @@ export default function NewProductPage() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
 
-              {/* Files Tab */}
-              <TabsContent value="files" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Product Files</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <Label>File Types Included</Label>
-                      </div>
-
+                    <div className="space-y-2">
+                      <Label>File Types Included</Label>
                       <div className="space-y-3">
                         <div className="flex items-center justify-between p-3 border rounded">
                           <div className="flex items-center gap-2">
@@ -652,96 +517,6 @@ export default function NewProductPage() {
                           />
                         </div>
                       </div>
-
-                      <Separator />
-
-                      <div className="space-y-2">
-                        <Label htmlFor="file-upload">Upload Files</Label>
-                        <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                          <input
-                            id="file-upload"
-                            type="file"
-                            multiple
-                            onChange={handleFileUpload}
-                            className="hidden"
-                            accept=".fseq,.xsq,.xml,.mp4,.mov,.gif,.png,.jpg,.jpeg"
-                          />
-                          <label
-                            htmlFor="file-upload"
-                            className="cursor-pointer block"
-                          >
-                            <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                            <p className="text-lg font-semibold mb-2">
-                              Click to upload or drag files here
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Supports: .fseq, .xsq, .xml, .mp4, .mov, .gif, .png, .jpg, .jpeg
-                            </p>
-                          </label>
-                        </div>
-                      </div>
-
-                      {uploadedFiles.length > 0 && (
-                        <div className="space-y-2">
-                          <Label>Uploaded Files</Label>
-                          <div className="space-y-2">
-                            {uploadedFiles.map((file) => (
-                              <div
-                                key={file.id}
-                                className="flex items-center justify-between p-3 border rounded"
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  {file.uploadProgress !== undefined && file.uploadProgress > 0 ? (
-                                    file.uploadProgress === 100 ? (
-                                      <Check className="h-5 w-5 text-green-600" />
-                                    ) : (
-                                      <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                    )
-                                  ) : file.uploadError ? (
-                                    <X className="h-5 w-5 text-destructive" />
-                                  ) : (
-                                    <Package className="h-5 w-5 text-muted-foreground" />
-                                  )}
-                                  <div className="flex-1">
-                                    <div className="font-medium">{file.fileName}</div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {file.uploadError ? (
-                                        <span className="text-destructive">{file.uploadError}</span>
-                                      ) : file.uploadProgress === 100 ? (
-                                        <span className="text-green-600">✓ Uploaded successfully</span>
-                                      ) : file.uploadProgress !== undefined && file.uploadProgress > 0 ? (
-                                        <span>Uploading...</span>
-                                      ) : (
-                                        formatFileSize(file.fileSize)
-                                      )}
-                                    </div>
-                                  </div>
-                                  <Badge variant="outline" className="text-xs">
-                                    {file.fileType}
-                                  </Badge>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeFile(file.id)}
-                                  disabled={file.uploadProgress !== undefined && file.uploadProgress > 0 && file.uploadProgress < 100}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!includesFSEQ && !includesSource && uploadedFiles.length === 0 && (
-                        <div className="flex items-start gap-2 p-3 bg-muted rounded">
-                          <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                          <p className="text-sm">
-                            Add files or enable at least one file type (FSEQ or Source)
-                          </p>
-                        </div>
-                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -914,7 +689,7 @@ export default function NewProductPage() {
               <TabsContent value="review" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Review & Publish</CardTitle>
+                    <CardTitle>Review & Save</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Summary */}
@@ -971,7 +746,7 @@ export default function NewProductPage() {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Uploaded Files:</span>
-                            <span className="font-medium">{uploadedFiles.length}</span>
+                            <span className="font-medium">{product.files?.length || 0}</span>
                           </div>
                         </div>
                       </div>
@@ -1013,27 +788,6 @@ export default function NewProductPage() {
 
                       {/* Validation */}
                       <div className="space-y-2">
-                        {!stripeStatus?.canReceivePayments && (
-                          <div className="flex items-start gap-2 text-red-600 bg-red-50 p-3 rounded border border-red-200">
-                            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                            <div>
-                              <p className="font-semibold">Stripe Account Required</p>
-                              <p className="text-sm">
-                                You must connect your Stripe account before you can publish products.
-                              </p>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-2 border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-                                onClick={() => router.push('/dashboard/creator/onboarding')}
-                              >
-                                <CreditCard className="h-4 w-4 mr-2" />
-                                Set Up Stripe Now
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-
                         {(!title.trim() || !description.trim() || !category || price === '') && (
                           <div className="flex items-start gap-2 text-yellow-600 bg-yellow-50 p-3 rounded">
                             <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -1046,41 +800,56 @@ export default function NewProductPage() {
                           </div>
                         )}
 
-                        {(!includesFSEQ && !includesSource && uploadedFiles.length === 0) && (
-                          <div className="flex items-start gap-2 text-yellow-600 bg-yellow-50 p-3 rounded">
-                            <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                        {title.trim() && description.trim() && category && price !== '' && (
+                          <div className="flex items-start gap-2 text-green-600 bg-green-50 p-3 rounded">
+                            <Check className="h-5 w-5 flex-shrink-0" />
                             <div>
-                              <p className="font-semibold">No Files</p>
+                              <p className="font-semibold">Ready to Save!</p>
                               <p className="text-sm">
-                                Add files or enable at least one file type (FSEQ or Source)
+                                Your product has all required information.
                               </p>
                             </div>
                           </div>
                         )}
-
-                        {title.trim() && description.trim() && category && price !== '' &&
-                          (includesFSEQ || includesSource || uploadedFiles.length > 0) &&
-                          stripeStatus?.canReceivePayments && (
-                            <div className="flex items-start gap-2 text-green-600 bg-green-50 p-3 rounded">
-                              <Check className="h-5 w-5 flex-shrink-0" />
-                              <div>
-                                <p className="font-semibold">Ready to Publish!</p>
-                                <p className="text-sm">
-                                  Your product has all required information and your Stripe account is connected.
-                                  You can save as draft or publish now.
-                                </p>
-                              </div>
-                            </div>
-                          )}
                       </div>
                     </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        )}
+
+                    <Separator />
+
+                    <div className="flex justify-between">
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push('/dashboard/products')}
+                      >
+                        Cancel
+                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleSave(false)}
+                          disabled={isSaving}
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          {isSaving ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                        {status !== 'PUBLISHED' && (
+                          <Button
+                            onClick={() => handleSave(true)}
+                            disabled={isSaving}
+                          >
+                            <Package className="h-4 w-4 mr-2" />
+                            {isPublishing ? 'Publishing...' : 'Publish Now'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          )}
+        </div>
       </div>
-    </div>
     </div>
   );
 }

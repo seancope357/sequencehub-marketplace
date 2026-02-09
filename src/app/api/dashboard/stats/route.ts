@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth';;
+import { getCurrentUser } from '@/lib/auth';
+import { isCreatorOrAdmin } from '@/lib/auth-utils';
 import { db } from '@/lib/db';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
@@ -11,6 +12,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    // Require CREATOR or ADMIN role to view stats
+    if (!isCreatorOrAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - CREATOR role required to view dashboard stats' },
+        { status: 403 }
       );
     }
 
