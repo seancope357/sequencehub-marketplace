@@ -1079,8 +1079,8 @@ export default function NewProductPage() {
             </TabsContent>
           </Tabs>
         )}
+        </div>
       </div>
-    </div>
     </div>
   );
 }

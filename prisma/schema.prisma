@@ -47,6 +47,8 @@ model User {
   auditLogs         AuditLog[]
   downloadTokens    DownloadToken[]
   legalAcceptances  LegalAcceptance[]
+  reviews           Review[]
+  reviewResponses   ReviewResponse[]
 }
 
 model Profile {
@@ -181,7 +183,12 @@ model Product {
   // Stats
   viewCount        Int            @default(0)
   saleCount        Int            @default(0)
-  
+
+  // Review aggregates
+  averageRating    Float?         @default(0)
+  reviewCount      Int            @default(0)
+  ratingDistribution String?      // JSON: {"5": 10, "4": 5, "3": 2, "2": 1, "1": 0}
+
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -192,6 +199,7 @@ model Product {
   tags             ProductTag[]
   prices           Price[]
   orderItems       OrderItem[]
+  reviews          Review[]
 
   @@index([creatorId])
   @@index([slug])
@@ -379,6 +387,7 @@ model Order {
   items           OrderItem[]
   entitlements    Entitlement[]
   auditLogs       AuditLog[]
+  reviews         Review[]
 
   @@index([userId])
   @@index([orderNumber])
@@ -517,6 +526,18 @@ enum AuditAction {
   ONBOARDING_STARTED
   ONBOARDING_STEP_COMPLETED
   ONBOARDING_COMPLETED
+  REVIEW_CREATED
+  REVIEW_UPDATED
+  REVIEW_DELETED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+  REVIEW_FLAGGED
+  REVIEW_HIDDEN
+  REVIEW_RESPONSE_CREATED
+  REVIEW_RESPONSE_UPDATED
+  REVIEW_RESPONSE_DELETED
+  REVIEW_VOTED_HELPFUL
+  REVIEW_VOTED_UNHELPFUL
 }
 
 model AuditLog {
@@ -585,4 +606,90 @@ model LegalAcceptance {
   @@unique([userId, documentType, documentVersion])
   @@index([userId])
   @@index([documentType])
+}
+
+// ============================================
+// REVIEWS & RATINGS
+// ============================================
+
+enum ReviewStatus {
+  PENDING      // Initial state (if moderation enabled)
+  APPROVED     // Visible on product page
+  REJECTED     // Creator/admin rejected
+  FLAGGED      // Flagged for review
+  HIDDEN       // Hidden by creator or admin
+}
+
+model Review {
+  id              String       @id @default(cuid())
+  productId       String
+  userId          String       // Reviewer (buyer)
+  orderId         String       // Link to purchase
+  entitlementId   String       // Proves buyer owns product
+
+  // Review content
+  rating          Int          // 1-5 stars
+  title           String?      // Optional review title (max 100 chars)
+  comment         String       // Review text (50-2000 chars)
+
+  // Moderation
+  status          ReviewStatus @default(APPROVED)
+  moderatedBy     String?      // Creator or admin who moderated
+  moderatedAt     DateTime?
+  moderationNote  String?      // Reason for rejection/flagging
+
+  // Helpful votes
+  helpfulCount    Int          @default(0)
+  unhelpfulCount  Int          @default(0)
+
+  // Metadata
+  verifiedPurchase Boolean     @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  product         Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  votes           ReviewVote[]
+  responses       ReviewResponse[]
+
+  @@unique([userId, productId])  // One review per user per product
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+  @@index([rating])
+  @@index([createdAt])
+}
+
+model ReviewVote {
+  id        String   @id @default(cuid())
+  reviewId  String
+  userId    String
+  isHelpful Boolean  // true = helpful, false = unhelpful
+  createdAt DateTime @default(now())
+
+  // Relations
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])  // One vote per user per review
+  @@index([reviewId])
+  @@index([userId])
+}
+
+model ReviewResponse {
+  id         String   @id @default(cuid())
+  reviewId   String
+  userId     String   // Creator or admin responding
+  comment    String   // Response text
+  isOfficial Boolean  @default(true)  // Mark as official creator response
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  review     Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@index([userId])
 }

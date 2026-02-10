@@ -41,6 +41,7 @@ interface Product {
     avatar?: string;
   };
   media: {
+    id: string;
     storageKey: string;
     mediaType: string;
   }[];
@@ -270,7 +271,7 @@ export default function ProductPage() {
                   productId={product.id}
                   productSlug={product.slug}
                   price={product.price}
-                  alreadyPurchased={product.purchased}
+                  alreadyOwned={product.purchased}
                   className="w-full"
                   size="lg"
                 />

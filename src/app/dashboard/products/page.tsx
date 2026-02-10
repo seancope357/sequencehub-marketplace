@@ -276,6 +276,10 @@ export default function DashboardProducts() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 View
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/dashboard/products/${product.id}/edit`)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive"
                                 onClick={() =>

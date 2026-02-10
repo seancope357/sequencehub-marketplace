@@ -200,6 +200,31 @@ export const RATE_LIMIT_CONFIGS = {
     windowSeconds: 60 * 60, // 1 hour
     identifier: 'dashboard:stats',
   } as RateLimitConfig,
+
+  // Review system - Prevent spam and abuse
+  REVIEW_CREATE: {
+    maxRequests: 5,
+    windowSeconds: 60 * 60, // 1 hour
+    identifier: 'review:create',
+  } as RateLimitConfig,
+
+  REVIEW_UPDATE: {
+    maxRequests: 10,
+    windowSeconds: 60 * 60, // 1 hour
+    identifier: 'review:update',
+  } as RateLimitConfig,
+
+  REVIEW_VOTE: {
+    maxRequests: 20,
+    windowSeconds: 60 * 60, // 1 hour
+    identifier: 'review:vote',
+  } as RateLimitConfig,
+
+  REVIEW_MODERATE: {
+    maxRequests: 50,
+    windowSeconds: 60 * 60, // 1 hour
+    identifier: 'review:moderate',
+  } as RateLimitConfig,
 } as const;
 
 /**

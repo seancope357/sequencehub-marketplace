@@ -230,7 +230,7 @@ export function ProductPageClient({ product }: ProductPageClientProps) {
                   productId={product.id}
                   productSlug={product.slug}
                   price={product.price}
-                  alreadyPurchased={product.purchased}
+                  alreadyOwned={product.purchased}
                   className="w-full"
                   size="lg"
                 />

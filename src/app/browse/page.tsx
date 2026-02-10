@@ -39,7 +39,7 @@ export default function BrowsePage() {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/products?q=${searchTerm}`);
+      const response = await fetch(`/api/products?search=${searchTerm}`);
       if (response.ok) {
         const data = await response.json();
         setProducts(data.products);
