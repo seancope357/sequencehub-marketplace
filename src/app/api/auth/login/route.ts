@@ -38,14 +38,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Create audit log
-    await createAuditLog({
-      userId: user.id,
-      action: 'USER_LOGIN',
-      entityType: 'user',
-      entityId: user.id,
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
-      userAgent: request.headers.get('user-agent') || undefined,
-    });
+    try {
+      await createAuditLog({
+        userId: user.id,
+        action: 'USER_LOGIN',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
+        userAgent: request.headers.get('user-agent') || undefined,
+      });
+    } catch (auditError) {
+      console.error('Login audit log failed (non-fatal):', auditError);
+      // Don't fail login if audit log fails
+    }
 
     return NextResponse.json(
       {
