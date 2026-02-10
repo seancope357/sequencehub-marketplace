@@ -5,12 +5,49 @@
  */
 
 import {
+  uploadFile as supabaseUploadFile,
   uploadBuffer as supabaseUploadBuffer,
   generateSignedUrl,
   deleteFile as supabaseDeleteFile,
   STORAGE_BUCKETS,
   StorageBucket
 } from './supabase/storage';
+
+/**
+ * Upload a file to storage
+ * Used by: /api/upload/complete route
+ */
+export async function uploadFile(
+  filePath: string | File,
+  storageKey: string,
+  options: {
+    contentType?: string;
+    metadata?: Record<string, any>;
+  } = {}
+): Promise<string> {
+  // Determine bucket from storage key
+  const bucket = determineBucket(storageKey);
+
+  // Read file if it's a path
+  let fileData: File | Buffer;
+  if (typeof filePath === 'string') {
+    const fs = await import('fs/promises');
+    fileData = await fs.readFile(filePath);
+  } else {
+    fileData = filePath;
+  }
+
+  const result = await supabaseUploadFile(bucket, storageKey, fileData, {
+    contentType: options.contentType,
+    metadata: options.metadata ? convertMetadataToStrings(options.metadata) : undefined,
+  });
+
+  if (result.error) {
+    throw new Error(`Storage upload failed: ${result.error}`);
+  }
+
+  return storageKey;
+}
 
 /**
  * Upload a buffer to storage
