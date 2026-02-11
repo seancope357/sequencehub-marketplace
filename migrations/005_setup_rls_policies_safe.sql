@@ -111,7 +111,7 @@ DROP POLICY IF EXISTS "Creators can read orders for their products" ON "Order";
 
 CREATE POLICY "Users can read own orders"
 ON "Order" FOR SELECT
-USING (auth.uid()::text = "buyerId");
+USING (auth.uid()::text = "userId");
 
 CREATE POLICY "Creators can read orders for their products"
 ON "Order" FOR SELECT
@@ -138,7 +138,7 @@ USING (
   EXISTS (
     SELECT 1 FROM "Order"
     WHERE "Order".id = "OrderItem"."orderId"
-    AND "Order"."buyerId" = auth.uid()::text
+    AND "Order"."userId" = auth.uid()::text
   )
 );
 
