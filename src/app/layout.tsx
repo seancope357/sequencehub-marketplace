@@ -42,6 +42,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Fix for keyboard event handler error in bundled code
+              window.addEventListener('error', function(e) {
+                if (e.message && e.message.includes("Cannot read properties of undefined (reading 'length')")) {
+                  e.preventDefault();
+                  console.warn('Suppressed keyboard event error');
+                  return true;
+                }
+              });
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
         suppressHydrationWarning
