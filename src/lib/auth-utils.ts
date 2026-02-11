@@ -1,6 +1,7 @@
 // Utility functions for authentication (no 'use server' - these are NOT Server Actions)
 import { User, UserRole } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import tokenBlacklist, { generateTokenId } from '@/lib/token-blacklist';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRY = '7d'; // 7 days
@@ -29,9 +30,18 @@ export function generateToken(payload: JWTPayload): string {
 
 /**
  * Verify a JWT token
+ * Checks both JWT validity and blacklist status
  */
 export function verifyToken(token: string): JWTPayload | null {
   try {
+    // First check if token is blacklisted
+    const tokenId = generateTokenId(token);
+    if (tokenBlacklist.isBlacklisted(tokenId)) {
+      console.log('[Auth] Token is blacklisted (revoked)');
+      return null;
+    }
+
+    // Then verify JWT signature and expiry
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
     return null;

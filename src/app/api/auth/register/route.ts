@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { registerUser, createAuditLog } from '@/lib/auth';;
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 import { sendWelcomeEmail } from '@/lib/email/send';
+import { validatePassword } from '@/lib/password-validation';
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting: 5 attempts per hour per IP
@@ -38,9 +39,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Password strength validation
-    if (password.length < 8) {
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters long' },
+        {
+          error: 'Password does not meet security requirements',
+          details: passwordValidation.errors
+        },
         { status: 400 }
       );
     }
@@ -49,9 +54,11 @@ export async function POST(request: NextRequest) {
     const user = await registerUser(email, password, name);
 
     if (!user) {
+      // SECURITY: Use generic error message to prevent email enumeration
+      // Don't reveal whether the email is already registered
       return NextResponse.json(
-        { error: 'User with this email already exists' },
-        { status: 409 }
+        { error: 'Registration failed. Please check your information and try again.' },
+        { status: 400 }
       );
     }
 

@@ -1,9 +1,28 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { getCurrentUser } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth-utils';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // SECURITY: Require admin authentication
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized - Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    if (!isAdmin(user)) {
+      return NextResponse.json(
+        { error: 'Forbidden - Admin access required' },
+        { status: 403 }
+      );
+    }
+
     // Test database connection
     const userCount = await db.user.count();
 
@@ -39,10 +58,15 @@ export async function GET() {
       }
     });
   } catch (error) {
+    console.error('Error in auth test endpoint:', error);
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
+      error: 'Internal server error',
+      // Stack traces only in development
+      ...(process.env.NODE_ENV === 'development' && {
+        details: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
     }, { status: 500 });
   }
 }
