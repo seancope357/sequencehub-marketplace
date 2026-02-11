@@ -3,19 +3,32 @@ import { createSession, createAuditLog } from '@/lib/auth';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
-  // Apply rate limiting: 10 attempts per 15 minutes per IP
-  const limitResult = await applyRateLimit(request, {
-    config: RATE_LIMIT_CONFIGS.AUTH_LOGIN,
-    byIp: true,
-    byUser: false,
-    message: 'Too many login attempts. Please try again in 15 minutes.',
-  });
-
-  if (!limitResult.allowed) {
-    return limitResult.response;
-  }
-
   try {
+    // Check environment first
+    if (!process.env.DATABASE_URL) {
+      console.error('CRITICAL: DATABASE_URL not set');
+      return NextResponse.json(
+        { error: 'Server configuration error', details: 'DATABASE_URL missing' },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+      console.error('WARNING: JWT_SECRET not set, using default');
+    }
+
+    // Apply rate limiting: 10 attempts per 15 minutes per IP
+    const limitResult = await applyRateLimit(request, {
+      config: RATE_LIMIT_CONFIGS.AUTH_LOGIN,
+      byIp: true,
+      byUser: false,
+      message: 'Too many login attempts. Please try again in 15 minutes.',
+    });
+
+    if (!limitResult.allowed) {
+      return limitResult.response;
+    }
+
     const body = await request.json();
     const { email, password } = body;
 
@@ -28,7 +41,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Create session
+    console.log('[Login] Creating session for:', email);
     const user = await createSession(email, password);
+    console.log('[Login] Session result:', user ? 'Success' : 'Failed');
 
     if (!user) {
       return NextResponse.json(

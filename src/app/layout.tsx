@@ -46,12 +46,24 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Fix for keyboard event handler error in bundled code
+              // Fix for browser extension errors (Bardeen, etc.)
               window.addEventListener('error', function(e) {
-                if (e.message && e.message.includes("Cannot read properties of undefined (reading 'length')")) {
+                // Suppress keyboard handler errors from extensions
+                if (e.message && (
+                  e.message.includes("Cannot read properties of undefined (reading 'length')") ||
+                  e.message.includes("reading 'length'") ||
+                  e.filename && (e.filename.includes('page-events') || e.filename.includes('chrome-extension'))
+                )) {
                   e.preventDefault();
-                  console.warn('Suppressed keyboard event error');
-                  return true;
+                  e.stopPropagation();
+                  return false;
+                }
+              }, true);
+
+              // Prevent extension keyboard handlers from breaking the page
+              window.addEventListener('unhandledrejection', function(e) {
+                if (e.reason && e.reason.message && e.reason.message.includes('length')) {
+                  e.preventDefault();
                 }
               });
             `,
