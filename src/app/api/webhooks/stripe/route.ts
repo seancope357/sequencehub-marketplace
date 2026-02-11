@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { headers } from 'next/headers';
 import { db } from '@/lib/db';
-import { createAuditLog } from '@/lib/auth';;
+import { createAuditLog, assignRole } from '@/lib/auth';
 import { sendPurchaseConfirmation, sendSaleNotification } from '@/lib/email/send';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2026-01-28.clover',
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
@@ -14,7 +14,8 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
-    const signature = headers().get('stripe-signature');
+    const headersList = await headers();
+    const signature = headersList.get('stripe-signature');
 
     if (!signature) {
       return NextResponse.json(
@@ -388,6 +389,12 @@ async function handleAccountUpdated(account: Stripe.Account) {
     },
   });
 
+  // Assign CREATOR role when onboarding is completed
+  if (isComplete) {
+    await assignRole(creatorAccount.userId, 'CREATOR');
+    console.log('CREATOR role assigned to user:', creatorAccount.userId);
+  }
+
   // Create audit log
   await createAuditLog({
     userId: creatorAccount.userId,
@@ -399,6 +406,7 @@ async function handleAccountUpdated(account: Stripe.Account) {
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
       onboardingStatus,
+      roleAssigned: isComplete ? 'CREATOR' : null,
     }),
   });
 

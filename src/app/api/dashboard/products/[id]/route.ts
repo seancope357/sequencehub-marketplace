@@ -6,7 +6,7 @@ import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -26,7 +26,7 @@ export async function GET(
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Fetch product with all details
     const product = await db.product.findUnique({
@@ -102,7 +102,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -134,7 +134,7 @@ export async function PATCH(
       return limitResult.response;
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Check if product exists and belongs to user
     const existingProduct = await db.product.findUnique({
@@ -427,7 +427,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getCurrentUser();
@@ -459,7 +459,7 @@ export async function DELETE(
       return limitResult.response;
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Check if product belongs to user
     const product = await db.product.findUnique({

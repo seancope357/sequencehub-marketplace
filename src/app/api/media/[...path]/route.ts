@@ -75,10 +75,11 @@ function getMimeTypeFromPath(path: string): string {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const storageKey = params.path.join('/');
+    const { path } = await params;
+    const storageKey = path.join('/');
     const { searchParams } = new URL(request.url);
     const expires = searchParams.get('expires');
     const signature = searchParams.get('signature');
