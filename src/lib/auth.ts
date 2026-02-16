@@ -1,13 +1,12 @@
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
-import { UserRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import {
   generateToken,
   verifyToken,
   type JWTPayload,
   type AuthUser,
-  type Role
 } from '@/lib/auth-utils';
 
 /**
@@ -53,9 +52,12 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       return null;
     }
 
-    // Remove passwordHash from returned user
-    const { passwordHash, ...userWithoutPassword } = user;
-    return userWithoutPassword as AuthUser;
+    // Remove passwordHash from returned user and map roles to enum values
+    const { passwordHash, roles, ...userWithoutPassword } = user;
+    return {
+      ...userWithoutPassword,
+      roles: roles.map(r => r.role)
+    } as AuthUser;
   } catch (error) {
     return null;
   }
@@ -114,9 +116,12 @@ export async function createSession(email: string, password: string): Promise<Au
   // Set auth cookie
   await setAuthCookie(token);
 
-  // Remove passwordHash from returned user
-  const { passwordHash, ...userWithoutPassword } = user;
-  return userWithoutPassword as AuthUser;
+  // Remove passwordHash from returned user and map roles to enum values
+  const { passwordHash, roles, ...userWithoutPassword } = user;
+  return {
+    ...userWithoutPassword,
+    roles: roles.map(r => r.role)
+  } as AuthUser;
 }
 
 /**
@@ -167,15 +172,18 @@ export async function registerUser(
   // Set auth cookie
   await setAuthCookie(token);
 
-  // Remove passwordHash from returned user
-  const { passwordHash: _, ...userWithoutPassword } = user;
-  return userWithoutPassword as AuthUser;
+  // Remove passwordHash from returned user and map roles to enum values
+  const { passwordHash: _, roles, ...userWithoutPassword } = user;
+  return {
+    ...userWithoutPassword,
+    roles: roles.map(r => r.role)
+  } as AuthUser;
 }
 
 /**
  * Assign a role to a user
  */
-export async function assignRole(userId: string, role: UserRole): Promise<void> {
+export async function assignRole(userId: string, role: Role): Promise<void> {
   await db.userRole.upsert({
     where: {
       userId_role: {
@@ -194,7 +202,7 @@ export async function assignRole(userId: string, role: UserRole): Promise<void> 
 /**
  * Remove a role from a user
  */
-export async function removeRole(userId: string, role: UserRole): Promise<void> {
+export async function removeRole(userId: string, role: Role): Promise<void> {
   await db.userRole.deleteMany({
     where: {
       userId,

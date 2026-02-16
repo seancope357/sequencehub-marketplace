@@ -3,6 +3,7 @@
  * Handles all email sending operations with proper error handling and logging
  */
 
+import React from 'react';
 import { render } from '@react-email/render';
 import { resend, EMAIL_CONFIG, isEmailConfigured } from './client';
 import type {
@@ -30,7 +31,7 @@ import { ProductPublishedEmail } from './templates/ProductPublishedEmail';
 // TEMPLATE REGISTRY
 // ============================================
 
-type EmailTemplateComponent = (props: any) => JSX.Element;
+type EmailTemplateComponent = (props: any) => React.ReactElement;
 
 interface TemplateConfig {
   component: EmailTemplateComponent;
@@ -116,7 +117,7 @@ export async function sendEmail<T extends BaseEmailData>(
     }
 
     // Render email component to HTML
-    const html = render(templateConfig.component(data));
+    const html = await render(templateConfig.component(data));
 
     // Generate subject line
     const subject = templateConfig.subject(data);

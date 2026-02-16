@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { UserRole } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { hasRole, isAdmin, isCreator, isCreatorOrAdmin } from '@/lib/auth-utils';;
 
 export function useAuth() {
@@ -16,7 +16,7 @@ export function useAuth() {
     isLoading,
     logout,
     refreshUser,
-    hasRole: (role: UserRole) => hasRole(user, role),
+    hasRole: (role: Role) => hasRole(user, role),
     isAdmin: isAdmin(user),
     isCreator: isCreator(user),
     isCreatorOrAdmin: isCreatorOrAdmin(user),
@@ -33,7 +33,7 @@ export function useRequireAuth() {
   return auth;
 }
 
-export function useRequireRole(role: UserRole) {
+export function useRequireRole(role: Role) {
   const auth = useAuth();
 
   if (!auth.isLoading && (!auth.isAuthenticated || !auth.hasRole(role))) {

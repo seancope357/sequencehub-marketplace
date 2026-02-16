@@ -20,15 +20,6 @@ export async function GET(request: NextRequest) {
         isActive: true,
       },
       include: {
-        product: {
-          include: {
-            media: {
-              where: { mediaType: 'cover' },
-              take: 1,
-            },
-          },
-        },
-        version: true,
         order: true,
       },
       orderBy: {
@@ -36,28 +27,55 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const purchases = entitlements.map((entitlement) => ({
-      id: entitlement.id,
-      product: {
-        id: entitlement.product.id,
-        slug: entitlement.product.slug,
-        title: entitlement.product.title,
-        category: entitlement.product.category,
-        media: entitlement.product.media[0] || undefined,
+    // Fetch related products and versions
+    const productIds = [...new Set(entitlements.map(e => e.productId))];
+    const versionIds = [...new Set(entitlements.map(e => e.versionId))];
+
+    const products = await db.product.findMany({
+      where: { id: { in: productIds } },
+      include: {
+        media: {
+          where: { mediaType: 'cover' },
+          take: 1,
+        },
       },
-      version: {
-        id: entitlement.version.id,
-        versionNumber: entitlement.version.versionNumber,
-        versionName: entitlement.version.versionName,
-        publishedAt: entitlement.version.publishedAt,
-      },
-      entitlementId: entitlement.id,
-      orderNumber: entitlement.order.orderNumber,
-      purchasedAt: entitlement.createdAt,
-      licenseType: entitlement.licenseType,
-      lastDownloadAt: entitlement.lastDownloadAt,
-      downloadCount: entitlement.downloadCount,
-    }));
+    });
+
+    const versions = await db.productVersion.findMany({
+      where: { id: { in: versionIds } },
+    });
+
+    // Create lookup maps
+    const productMap = new Map(products.map(p => [p.id, p]));
+    const versionMap = new Map(versions.map(v => [v.id, v]));
+
+    const purchases = entitlements.map((entitlement) => {
+      const product = productMap.get(entitlement.productId);
+      const version = versionMap.get(entitlement.versionId);
+
+      return {
+        id: entitlement.id,
+        product: product ? {
+          id: product.id,
+          slug: product.slug,
+          title: product.title,
+          category: product.category,
+          media: product.media[0] || undefined,
+        } : null,
+        version: version ? {
+          id: version.id,
+          versionNumber: version.versionNumber,
+          versionName: version.versionName,
+          publishedAt: version.publishedAt,
+        } : null,
+        entitlementId: entitlement.id,
+        orderNumber: entitlement.order.orderNumber,
+        purchasedAt: entitlement.createdAt,
+        licenseType: entitlement.licenseType,
+        lastDownloadAt: entitlement.lastDownloadAt,
+        downloadCount: entitlement.downloadCount,
+      };
+    });
 
     return NextResponse.json(
       { purchases },

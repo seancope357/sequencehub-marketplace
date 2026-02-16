@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Check if user already has CREATOR role
-    const hasCreatorRole = user.roles.some((r) => r.role === 'CREATOR');
+    const hasCreatorRole = user.roles.includes('CREATOR');
     if (hasCreatorRole) {
       return NextResponse.json(
         { error: 'You are already a creator. Visit your dashboard to manage your products.' },

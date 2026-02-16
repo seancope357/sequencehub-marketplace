@@ -56,7 +56,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Account Type</label>
-                <p className="text-base">{user.roles.map(r => r.role).join(', ')}</p>
+                <p className="text-base">{user.roles.join(', ')}</p>
               </div>
             </CardContent>
           </Card>

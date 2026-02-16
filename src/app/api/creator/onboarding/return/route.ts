@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     // 5. If onboarding is complete, assign CREATOR role
     if (isComplete && chargesEnabled) {
-      const hasCreatorRole = user.roles.some((r) => r.role === 'CREATOR');
+      const hasCreatorRole = user.roles.includes('CREATOR');
 
       if (!hasCreatorRole) {
         // Assign CREATOR role

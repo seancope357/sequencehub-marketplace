@@ -96,7 +96,7 @@ export interface ProductPublishedEmailData extends BaseEmailData {
 export interface EmailSendOptions {
   priority?: 'high' | 'normal' | 'low';
   scheduledFor?: Date;
-  tags?: string[];
+  tags?: { name: string; value: string; }[];
   headers?: Record<string, string>;
 }
 

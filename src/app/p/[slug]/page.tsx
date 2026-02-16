@@ -273,7 +273,6 @@ export default function ProductPage() {
                   price={product.price}
                   alreadyOwned={product.purchased}
                   className="w-full"
-                  size="lg"
                 />
               </CardContent>
             </Card>

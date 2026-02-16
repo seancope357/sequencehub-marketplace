@@ -20,45 +20,62 @@ export async function GET(request: NextRequest) {
         isActive: true,
       },
       include: {
-        product: {
+        order: {
           include: {
-            versions: {
-              where: { isLatest: true },
-              take: 1,
-            },
+            items: true,
           },
         },
-        order: true,
       },
       orderBy: {
         createdAt: 'desc',
       },
     });
 
-    // Transform data
-    const purchases = entitlements.map((entitlement) => ({
-      id: entitlement.id,
-      orderNumber: entitlement.order.orderNumber,
-      product: {
-        id: entitlement.product.id,
-        slug: entitlement.product.slug,
-        title: entitlement.product.title,
-        category: entitlement.product.category,
-        description: entitlement.product.description,
-        includesFSEQ: entitlement.product.includesFSEQ,
-        includesSource: entitlement.product.includesSource,
+    // Fetch related products with their latest versions
+    const productIds = [...new Set(entitlements.map(e => e.productId))];
+    const products = await db.product.findMany({
+      where: { id: { in: productIds } },
+      include: {
+        versions: {
+          where: { isLatest: true },
+          take: 1,
+        },
       },
-      version: entitlement.product.versions[0]
-        ? {
-            id: entitlement.product.versions[0].id,
-            versionNumber: entitlement.product.versions[0].versionNumber,
-            versionName: entitlement.product.versions[0].versionName,
-            publishedAt: entitlement.product.versions[0].publishedAt?.toISOString() || '',
-          }
-        : null,
-      price: entitlement.order.totalAmount / entitlement.order.items.length, // Approximate price per item
-      purchasedAt: entitlement.createdAt.toISOString(),
-    }));
+    });
+
+    // Create product lookup map
+    const productMap = new Map(products.map(p => [p.id, p]));
+
+    // Transform data
+    const purchases = entitlements.map((entitlement) => {
+      const product = productMap.get(entitlement.productId);
+
+      return {
+        id: entitlement.id,
+        orderNumber: entitlement.order.orderNumber,
+        product: product ? {
+          id: product.id,
+          slug: product.slug,
+          title: product.title,
+          category: product.category,
+          description: product.description,
+          includesFSEQ: product.includesFSEQ,
+          includesSource: product.includesSource,
+        } : null,
+        version: product && product.versions[0]
+          ? {
+              id: product.versions[0].id,
+              versionNumber: product.versions[0].versionNumber,
+              versionName: product.versions[0].versionName,
+              publishedAt: product.versions[0].publishedAt?.toISOString() || '',
+            }
+          : null,
+        price: entitlement.order.items.length > 0
+          ? entitlement.order.totalAmount / entitlement.order.items.length
+          : entitlement.order.totalAmount, // Approximate price per item
+        purchasedAt: entitlement.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json(
       { purchases },

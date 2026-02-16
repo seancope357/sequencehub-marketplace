@@ -4,15 +4,18 @@ import { getCurrentUser } from '@/lib/auth';;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { slug } = await params;
+    const { id } = await params;
     const user = await getCurrentUser();
 
-    // Fetch product
+    // Determine if id is a CUID (starts with 'c') or a slug
+    const isId = id.startsWith('c') && id.length > 20;
+
+    // Fetch product by ID or slug
     const product = await db.product.findUnique({
-      where: { slug },
+      where: isId ? { id } : { slug: id },
       include: {
         creator: {
           select: {
@@ -33,15 +36,8 @@ export async function GET(
         versions: {
           where: { isLatest: true },
           orderBy: { versionNumber: 'desc' },
-        },
-        files: {
           include: {
-            version: {
-              select: {
-                versionNumber: true,
-                versionName: true,
-              },
-            },
+            files: true,
           },
         },
       },
@@ -77,6 +73,23 @@ export async function GET(
       },
     });
 
+    // Extract files from latest versions
+    const files = product.versions.flatMap(version =>
+      version.files.map(file => ({
+        id: file.id,
+        fileName: file.fileName,
+        originalName: file.originalName,
+        fileType: file.fileType,
+        fileSize: file.fileSize,
+        sequenceLength: file.sequenceLength,
+        fps: file.fps,
+        channelCount: file.channelCount,
+        versionId: version.id,
+        versionNumber: version.versionNumber,
+        versionName: version.versionName,
+      }))
+    );
+
     // Transform data
     const transformedProduct = {
       id: product.id,
@@ -96,16 +109,7 @@ export async function GET(
       creator: product.creator,
       media: product.media,
       versions: product.versions,
-      files: product.files.map((file) => ({
-        id: file.id,
-        fileName: file.fileName,
-        originalName: file.originalName,
-        fileType: file.fileType,
-        fileSize: file.fileSize,
-        sequenceLength: file.sequenceLength,
-        fps: file.fps,
-        channelCount: file.channelCount,
-      })),
+      files,
       saleCount: product.saleCount,
       viewCount: product.viewCount,
       purchased,

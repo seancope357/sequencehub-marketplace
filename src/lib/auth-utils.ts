@@ -1,5 +1,5 @@
 // Utility functions for authentication (no 'use server' - these are NOT Server Actions)
-import { User, UserRole } from '@prisma/client';
+import { User, Role } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import tokenBlacklist, { generateTokenId } from '@/lib/token-blacklist';
 
@@ -14,11 +14,6 @@ export interface JWTPayload {
 
 export interface AuthUser extends Omit<User, 'passwordHash'> {
   roles: Role[];
-}
-
-export interface Role {
-  id: string;
-  role: UserRole;
 }
 
 /**
@@ -51,9 +46,9 @@ export function verifyToken(token: string): JWTPayload | null {
 /**
  * Check if user has a specific role
  */
-export function hasRole(user: AuthUser | null, role: UserRole): boolean {
+export function hasRole(user: AuthUser | null, role: Role): boolean {
   if (!user) return false;
-  return user.roles.some((r) => r.role === role);
+  return user.roles.includes(role);
 }
 
 /**

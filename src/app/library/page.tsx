@@ -128,7 +128,7 @@ export default function Library() {
               <Button variant="ghost" onClick={() => (window.location.href = '/')}>
                 Marketplace
               </Button>
-              {user.roles.some((r) => r.role === 'CREATOR') && (
+              {user.roles.includes('CREATOR') && (
                 <Button variant="ghost" onClick={() => (window.location.href = '/dashboard')}>
                   Dashboard
                 </Button>

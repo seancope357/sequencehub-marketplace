@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${BASE_URL}/library?purchase=success`);
     }
 
-    if (checkoutSession.status === 'CANCELED' || checkoutSession.status === 'EXPIRED') {
+    if (checkoutSession.status === 'CANCELLED' || checkoutSession.status === 'EXPIRED') {
       // Canceled or expired - redirect to product
       const product = await db.product.findUnique({
         where: { id: checkoutSession.productId },

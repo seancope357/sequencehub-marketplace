@@ -29,17 +29,6 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         isActive: true,
       },
-      include: {
-        product: {
-          include: {
-            versions: {
-              include: {
-                files: true,
-              },
-            },
-          },
-        },
-      },
     });
 
     if (!entitlement) {
@@ -59,8 +48,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find the version with files
-    const version = entitlement.product.versions.find((v) => v.id === fileVersionId);
+    // Fetch the version with files
+    const version = await db.productVersion.findUnique({
+      where: { id: fileVersionId },
+      include: {
+        files: true,
+      },
+    });
+
     if (!version || !version.files || version.files.length === 0) {
       return NextResponse.json(
         { error: 'No files found for this version' },

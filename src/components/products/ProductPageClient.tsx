@@ -232,7 +232,6 @@ export function ProductPageClient({ product }: ProductPageClientProps) {
                   price={product.price}
                   alreadyOwned={product.purchased}
                   className="w-full"
-                  size="lg"
                 />
               </CardContent>
             </Card>

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 import { z } from 'zod';
 import { applyRateLimit, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit';
+import { updateProductRatingAggregates } from '@/lib/reviews/utils';
 
 // Validation schema
 const createReviewSchema = z.object({
@@ -237,67 +238,3 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Update product rating aggregates
- * Calculates average rating, review count, and rating distribution
- */
-async function updateProductRatingAggregates(productId: string) {
-  try {
-    // Get all approved reviews for this product
-    const reviews = await db.review.findMany({
-      where: {
-        productId,
-        status: 'APPROVED',
-      },
-      select: {
-        rating: true,
-      },
-    });
-
-    const reviewCount = reviews.length;
-
-    if (reviewCount === 0) {
-      // No reviews, set to defaults
-      await db.product.update({
-        where: { id: productId },
-        data: {
-          averageRating: 0,
-          reviewCount: 0,
-          ratingDistribution: null,
-        },
-      });
-      return;
-    }
-
-    // Calculate average rating
-    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-    const averageRating = totalRating / reviewCount;
-
-    // Calculate rating distribution
-    const distribution = {
-      '5': 0,
-      '4': 0,
-      '3': 0,
-      '2': 0,
-      '1': 0,
-    };
-
-    reviews.forEach((review) => {
-      distribution[review.rating.toString() as keyof typeof distribution]++;
-    });
-
-    // Update product
-    await db.product.update({
-      where: { id: productId },
-      data: {
-        averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
-        reviewCount,
-        ratingDistribution: JSON.stringify(distribution),
-      },
-    });
-
-  } catch (error) {
-    console.error('Error updating product rating aggregates:', error);
-    // Don't throw - this is a background operation
-  }
-}
